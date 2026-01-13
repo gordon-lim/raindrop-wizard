@@ -56,8 +56,8 @@ describe.skip('installPackage', () => {
 
     await installPackage({
       alreadyInstalled: false,
-      packageName: 'posthog-js',
-      packageNameDisplayLabel: 'posthog-js',
+      packageName: 'raindrop-js',
+      packageNameDisplayLabel: 'raindrop-js',
       forceInstall: true,
       askBeforeUpdating: false,
       packageManager: packageManagerMock,
@@ -65,7 +65,7 @@ describe.skip('installPackage', () => {
     });
 
     expect(execSpy).toHaveBeenCalledWith(
-      'npm install posthog-js  --force',
+      'npm install raindrop-js  --force',
       expect.any(Function),
     );
   });
@@ -97,8 +97,8 @@ describe.skip('installPackage', () => {
 
       await installPackage({
         alreadyInstalled: false,
-        packageName: 'posthog-js',
-        packageNameDisplayLabel: 'posthog-js',
+        packageName: 'PostHog-js',
+        packageNameDisplayLabel: 'PostHog-js',
         forceInstall: flag,
         askBeforeUpdating: false,
         packageManager: packageManagerMock,
@@ -106,7 +106,7 @@ describe.skip('installPackage', () => {
       });
 
       expect(execSpy).toHaveBeenCalledWith(
-        'npm install posthog-js  ',
+        'npm install raindrop-js  ',
         expect.any(Function),
       );
     },

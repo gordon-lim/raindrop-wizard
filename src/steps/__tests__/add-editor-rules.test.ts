@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import path from 'path';
 import { addEditorRulesStep } from '../add-editor-rules';
-import { analytics } from '../../utils/analytics';
 import clack from '../../utils/clack';
 import { Integration } from '../../lib/constants';
 import chalk from 'chalk';
@@ -12,14 +11,6 @@ jest.mock('fs', () => ({
     mkdir: jest.fn(),
     readFile: jest.fn(),
     writeFile: jest.fn(),
-  },
-}));
-
-jest.mock('../../utils/analytics', () => ({
-  analytics: {
-    capture: jest.fn(),
-    setTag: jest.fn(),
-    shutdown: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -43,8 +34,6 @@ describe('addEditorRules', () => {
   const mkdirMock = fs.promises.mkdir as jest.Mock;
   const readFileMock = fs.promises.readFile as jest.Mock;
   const writeFileMock = fs.promises.writeFile as jest.Mock;
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  const captureMock = analytics.capture as jest.Mock;
   const infoMock = clack.log.info as jest.Mock;
   const selectMock = clack.select as jest.Mock;
   const isCancelMock = clack.isCancel as unknown as jest.Mock;
@@ -77,7 +66,6 @@ describe('addEditorRules', () => {
     expect(mkdirMock).not.toHaveBeenCalled();
     expect(readFileMock).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
-    expect(captureMock).not.toHaveBeenCalled();
     expect(infoMock).not.toHaveBeenCalled();
   });
 
@@ -116,21 +104,15 @@ describe('addEditorRules', () => {
 
     // Check if combined rules were written correctly
     expect(writeFileMock).toHaveBeenCalledWith(
-      path.join('/test/dir', '.cursor', 'rules', 'posthog-integration.mdc'),
+      path.join('/test/dir', '.cursor', 'rules', 'raindrop-integration.mdc'),
       expectedCombinedRules,
       'utf8',
     );
 
-    // Check if analytics were captured
-    expect(captureMock).toHaveBeenCalledWith('wizard interaction', {
-      action: 'added editor rules',
-      integration: mockOptions.integration,
-    });
-
     // Check if success message was logged
     expect(infoMock).toHaveBeenCalledWith(
       `Added Cursor rules to ${chalk.bold.cyan(
-        '.cursor/rules/posthog-integration.mdc',
+        '.cursor/rules/raindrop-integration.mdc',
       )}`,
     );
   });
@@ -145,7 +127,6 @@ describe('addEditorRules', () => {
     await expect(addEditorRulesStep(mockOptions)).rejects.toThrow(mockError);
 
     expect(writeFileMock).not.toHaveBeenCalled();
-    expect(captureMock).not.toHaveBeenCalled();
     expect(infoMock).not.toHaveBeenCalled();
   });
 
@@ -159,7 +140,6 @@ describe('addEditorRules', () => {
     await expect(addEditorRulesStep(mockOptions)).rejects.toThrow(mockError);
 
     expect(writeFileMock).not.toHaveBeenCalled();
-    expect(captureMock).not.toHaveBeenCalled();
     expect(infoMock).not.toHaveBeenCalled();
   });
 
@@ -167,7 +147,7 @@ describe('addEditorRules', () => {
     process.env.CURSOR_TRACE_ID = 'test-trace-id';
 
     const mockFrameworkRules = `---
-description: apply when interacting with PostHog/analytics tasks
+description: apply when interacting with raindrop.ai/analytics tasks
 globs: 
 alwaysApply: true
 ---
@@ -185,7 +165,7 @@ alwaysApply: true
 A given feature flag should be used in as few places as possible. Do not increase the risk of undefined behavior by scattering the same feature flag across multiple areas of code.`;
 
     const expectedCombinedRules = `---
-description: apply when interacting with PostHog/analytics tasks
+description: apply when interacting with raindrop.ai/analytics tasks
 globs: 
 alwaysApply: true
 ---
@@ -224,21 +204,15 @@ A given feature flag should be used in as few places as possible. Do not increas
 
     // Check if combined rules were written correctly
     expect(writeFileMock).toHaveBeenCalledWith(
-      path.join('/test/dir', '.cursor', 'rules', 'posthog-integration.mdc'),
+      path.join('/test/dir', '.cursor', 'rules', 'raindrop-integration.mdc'),
       expectedCombinedRules,
       'utf8',
     );
 
-    // Check if analytics were captured
-    expect(captureMock).toHaveBeenCalledWith('wizard interaction', {
-      action: 'added editor rules',
-      integration: mockOptions.integration,
-    });
-
     // Check if success message was logged
     expect(infoMock).toHaveBeenCalledWith(
       `Added Cursor rules to ${chalk.bold.cyan(
-        '.cursor/rules/posthog-integration.mdc',
+        '.cursor/rules/raindrop-integration.mdc',
       )}`,
     );
   });

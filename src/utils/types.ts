@@ -1,7 +1,7 @@
-export type PostHogProjectData = Record<string, unknown>;
+export type RaindropProjectData = Record<string, unknown>;
 
 export type PreselectedProject = {
-  project: PostHogProjectData;
+  project: RaindropProjectData;
   authToken: string;
 };
 
@@ -27,32 +27,12 @@ export type WizardOptions = {
   installDir: string;
 
   /**
-   * The cloud region to use.
-   */
-  cloudRegion?: CloudRegion;
-
-  /**
    * Whether to select the default option for all questions automatically.
    */
   default: boolean;
 
   /**
-   * Whether to create a new PostHog account during setup.
-   */
-  signup: boolean;
-
-  /**
-   * Whether to use the local MCP server at http://localhost:8787/mcp
-   */
-  localMcp: boolean;
-
-  /**
-   * CI mode - non-interactive execution
-   */
-  ci: boolean;
-
-  /**
-   * Personal API key (phx_xxx) - used for LLM gateway auth, skips OAuth
+   * Personal API key (phx_xxx) - optional, not currently used
    */
   apiKey?: string;
 };

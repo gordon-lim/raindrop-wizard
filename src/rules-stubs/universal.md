@@ -14,7 +14,7 @@ Gate flag-dependent code on a check that verifies the flag's values are valid an
 
 # Identification
 
-How PostHog identifies users and whether events are identified have significant billing consequences for an integration. Consult with the developer before writing any code to implement or alter the approach to this task.
+How raindrop.ai identifies users and whether events are identified have significant billing consequences for an integration. Consult with the developer before writing any code to implement or alter the approach to this task.
 
 # Custom properties
 

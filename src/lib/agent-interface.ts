@@ -1,15 +1,12 @@
 /**
- * Shared agent interface for PostHog wizards
- * Uses Claude Agent SDK directly with PostHog LLM gateway
+ * Shared agent interface for raindrop.ai wizards
+ * Uses Claude Agent SDK directly
  */
 
 import path from 'path';
 import clack from '../utils/clack';
 import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug';
 import type { WizardOptions } from '../utils/types';
-import { analytics } from '../utils/analytics';
-import { WIZARD_INTERACTION_EVENT_NAME } from './constants';
-import { getLlmGatewayUrlFromHost } from '../utils/urls';
 import { LINTING_TOOLS } from './safe-tools';
 
 // Dynamic import cache for ESM module
@@ -39,30 +36,10 @@ type McpServersConfig = any;
 export const AgentSignals = {
   /** Signal emitted when the agent reports progress to the user */
   STATUS: '[STATUS]',
-  /** Signal emitted when the agent cannot access the PostHog MCP server */
-  ERROR_MCP_MISSING: '[ERROR-MCP-MISSING]',
-  /** Signal emitted when the agent cannot access the setup resource */
-  ERROR_RESOURCE_MISSING: '[ERROR-RESOURCE-MISSING]',
 } as const;
-
-export type AgentSignal = (typeof AgentSignals)[keyof typeof AgentSignals];
-
-/**
- * Error types that can be returned from agent execution.
- * These correspond to the error signals that the agent emits.
- */
-export enum AgentErrorType {
-  /** Agent could not access the PostHog MCP server */
-  MCP_MISSING = 'WIZARD_MCP_MISSING',
-  /** Agent could not access the setup resource */
-  RESOURCE_MISSING = 'WIZARD_RESOURCE_MISSING',
-}
 
 export type AgentConfig = {
   workingDirectory: string;
-  posthogMcpUrl: string;
-  posthogApiKey: string;
-  posthogApiHost: string;
 };
 
 /**
@@ -77,7 +54,17 @@ type AgentRunConfig = {
 /**
  * Package managers that can be used to run commands.
  */
-const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun', 'npx'];
+const PACKAGE_MANAGERS = [
+  'npm',
+  'pnpm',
+  'yarn',
+  'bun',
+  'npx',
+  'pip',
+  'poetry',
+  'pipenv',
+  'conda',
+];
 
 /**
  * Safe scripts/commands that can be run with any package manager.
@@ -160,11 +147,6 @@ export function wizardCanUseTool(
   if (DANGEROUS_OPERATORS.test(command)) {
     logToFile(`Denying bash command with dangerous operators: ${command}`);
     debug(`Denying bash command with dangerous operators: ${command}`);
-    analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-      action: 'bash command denied',
-      reason: 'dangerous operators',
-      command,
-    });
     return {
       behavior: 'deny',
       message: `Bash command not allowed. Shell operators like ; \` $ ( ) are not permitted.`,
@@ -183,11 +165,6 @@ export function wizardCanUseTool(
     if (/[|&]/.test(baseCommand)) {
       logToFile(`Denying bash command with multiple pipes: ${command}`);
       debug(`Denying bash command with multiple pipes: ${command}`);
-      analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-        action: 'bash command denied',
-        reason: 'multiple pipes',
-        command,
-      });
       return {
         behavior: 'deny',
         message: `Bash command not allowed. Only single pipe to tail/head is permitted.`,
@@ -205,11 +182,6 @@ export function wizardCanUseTool(
   if (/[|&]/.test(normalized)) {
     logToFile(`Denying bash command with pipe/&: ${command}`);
     debug(`Denying bash command with pipe/&: ${command}`);
-    analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-      action: 'bash command denied',
-      reason: 'disallowed pipe',
-      command,
-    });
     return {
       behavior: 'deny',
       message: `Bash command not allowed. Pipes are only permitted with tail/head for output limiting.`,
@@ -225,11 +197,6 @@ export function wizardCanUseTool(
 
   logToFile(`Denying bash command: ${command}`);
   debug(`Denying bash command: ${command}`);
-  analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-    action: 'bash command denied',
-    reason: 'not in allowlist',
-    command,
-  });
   return {
     behavior: 'deny',
     message: `Bash command not allowed. Only install, build, typecheck, lint, and formatting commands are permitted.`,
@@ -237,7 +204,7 @@ export function wizardCanUseTool(
 }
 
 /**
- * Initialize agent configuration for the LLM gateway
+ * Initialize agent configuration for the Claude agent
  */
 export function initializeAgent(
   config: AgentConfig,
@@ -251,25 +218,22 @@ export function initializeAgent(
   clack.log.step('Initializing Claude agent...');
 
   try {
-    // Configure LLM gateway environment variables (inherited by SDK subprocess)
-    const gatewayUrl = getLlmGatewayUrlFromHost(config.posthogApiHost);
-    process.env.ANTHROPIC_BASE_URL = gatewayUrl;
-    process.env.ANTHROPIC_AUTH_TOKEN = config.posthogApiKey;
-    // Disable experimental betas (like input_examples) that the LLM gateway doesn't support
+    // ANTHROPIC_API_KEY is required
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error(
+        'ANTHROPIC_API_KEY environment variable is required. Please set it before running the wizard.',
+      );
+    }
+
+    // Use direct Claude API key (standard SDK authentication)
+    logToFile(
+      'Using direct Claude API key from ANTHROPIC_API_KEY environment variable',
+    );
+    // SDK will use ANTHROPIC_API_KEY automatically - no need to set ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN
     process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = 'true';
 
-    logToFile('Configured LLM gateway:', gatewayUrl);
-
-    // Configure MCP server with PostHog authentication
-    const mcpServers: McpServersConfig = {
-      posthog: {
-        type: 'http',
-        url: config.posthogMcpUrl,
-        headers: {
-          Authorization: `Bearer ${config.posthogApiKey}`,
-        },
-      },
-    };
+    // MCP servers not used - pass empty config for SDK compatibility
+    const mcpServers: McpServersConfig = {};
 
     const agentRunConfig: AgentRunConfig = {
       workingDirectory: config.workingDirectory,
@@ -279,17 +243,13 @@ export function initializeAgent(
 
     logToFile('Agent config:', {
       workingDirectory: agentRunConfig.workingDirectory,
-      posthogMcpUrl: config.posthogMcpUrl,
-      gatewayUrl,
-      apiKeyPresent: !!config.posthogApiKey,
+      apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
     });
 
     if (options.debug) {
       debug('Agent config:', {
         workingDirectory: agentRunConfig.workingDirectory,
-        posthogMcpUrl: config.posthogMcpUrl,
-        gatewayUrl,
-        apiKeyPresent: !!config.posthogApiKey,
+        apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
       });
     }
 
@@ -321,11 +281,11 @@ export async function runAgent(
     successMessage?: string;
     errorMessage?: string;
   },
-): Promise<{ error?: AgentErrorType }> {
+): Promise<void> {
   const {
     estimatedDurationMinutes = 8,
-    spinnerMessage = 'Customizing your PostHog setup...',
-    successMessage = 'PostHog integration complete',
+    spinnerMessage = 'Customizing your raindrop.ai setup...',
+    successMessage = 'raindrop.ai integration complete',
     errorMessage = 'Integration failed',
   } = config ?? {};
 
@@ -404,30 +364,10 @@ export async function runAgent(
     }
 
     const durationMs = Date.now() - startTime;
-    const outputText = collectedText.join('\n');
-
-    // Check for error markers in the agent's output
-    if (outputText.includes(AgentSignals.ERROR_MCP_MISSING)) {
-      logToFile('Agent error: MCP_MISSING');
-      spinner.stop('Agent could not access PostHog MCP');
-      return { error: AgentErrorType.MCP_MISSING };
-    }
-
-    if (outputText.includes(AgentSignals.ERROR_RESOURCE_MISSING)) {
-      logToFile('Agent error: RESOURCE_MISSING');
-      spinner.stop('Agent could not access setup resource');
-      return { error: AgentErrorType.RESOURCE_MISSING };
-    }
 
     logToFile(`Agent run completed in ${Math.round(durationMs / 1000)}s`);
-    analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-      action: 'agent integration completed',
-      duration_ms: durationMs,
-      duration_seconds: Math.round(durationMs / 1000),
-    });
 
     spinner.stop(successMessage);
-    return {};
   } catch (error) {
     spinner.stop(errorMessage);
     clack.log.error(`Error: ${(error as Error).message}`);
@@ -472,7 +412,7 @@ function handleSDKMessage(
             const statusMatch = block.text.match(statusRegex);
             if (statusMatch) {
               spinner.stop(statusMatch[1].trim());
-              spinner.start('Integrating PostHog...');
+              spinner.start('Integrating raindrop.ai...');
             }
           }
         }
@@ -504,7 +444,6 @@ function handleSDKMessage(
         logToFile('Agent session initialized', {
           model: message.model,
           tools: message.tools?.length,
-          mcpServers: message.mcp_servers,
         });
       }
       break;

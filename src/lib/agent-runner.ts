@@ -8,32 +8,18 @@ import {
   abort,
   askForAIConsent,
   confirmContinueIfNoOrDirtyGitRepo,
-  ensurePackageIsInstalled,
-  getOrAskForProjectData,
-  getPackageDotJson,
-  isUsingTypeScript,
   printWelcome,
-  askForCloudRegion,
 } from '../utils/clack-utils';
-import { analytics } from '../utils/analytics';
-import { WIZARD_INTERACTION_EVENT_NAME } from './constants';
+import fs from 'fs';
+import path from 'path';
 import clack from '../utils/clack';
-import {
-  initializeAgent,
-  runAgent,
-  AgentSignals,
-  AgentErrorType,
-} from './agent-interface';
-import { getCloudUrlFromRegion } from '../utils/urls';
+import { initializeAgent, runAgent } from './agent-interface';
+import { logToFile, LOG_FILE_PATH } from '../utils/debug';
 import chalk from 'chalk';
-import {
-  addMCPServerToClientsStep,
-  uploadEnvironmentVariablesStep,
-} from '../steps';
 
 /**
  * Universal agent-powered wizard runner.
- * Handles the complete flow for any framework using PostHog MCP integration.
+ * Handles the complete flow for any raindrop.ai integration.
  */
 export async function runAgentWizard(
   config: FrameworkConfig,
@@ -43,198 +29,71 @@ export async function runAgentWizard(
   printWelcome({ wizardName: getWelcomeMessage(config.metadata.name) });
 
   clack.log.info(
-    `🧙 The wizard has chosen you to try the next-generation agent integration for ${config.metadata.name}.\n\nStand by for the good stuff, and let the robot minders know how it goes:\n\nwizard@posthog.com`,
+    `🧙 The wizard has chosen you to try the next-generation agent integration for ${config.metadata.name}.\n\nStand by for the good stuff, and let the robot minders know how it goes:\n\nwizard@raindrop.ai`,
   );
 
   const aiConsent = await askForAIConsent(options);
   if (!aiConsent) {
-    await abort(
-      `This wizard uses an LLM agent to intelligently modify your project. Please view the docs to set up ${config.metadata.name} manually instead: ${config.metadata.docsUrl}`,
+    abort(
+      `This wizard uses an LLM agent to intelligently modify your project. Please view the docs to set up raindrop.ai for your ${config.metadata.name} SDK manually instead: ${config.metadata.docsUrl}`,
       0,
     );
   }
 
-  const cloudRegion = options.cloudRegion ?? (await askForCloudRegion());
-  const typeScriptDetected = isUsingTypeScript(options);
-
+  // Check if the current directory is a git repository and has uncommitted or untracked changes; prompt the user to continue if so.
   await confirmContinueIfNoOrDirtyGitRepo(options);
 
-  // Framework detection and version
-  const packageJson = await getPackageDotJson(options);
-  await ensurePackageIsInstalled(
-    packageJson,
-    config.detection.packageName,
-    config.detection.packageDisplayName,
-  );
+  // Framework detection and version (only for projects with package.json)
+  let packageJson: any = {};
+  const packageJsonPath = path.join(options.installDir, 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJsonContent = await fs.promises.readFile(
+        packageJsonPath,
+        'utf-8',
+      );
+      packageJson = JSON.parse(packageJsonContent);
+    } catch {
+      // package.json exists but couldn't be read/parsed - continue without it
+    }
+  }
 
   const frameworkVersion = config.detection.getVersion(packageJson);
 
-  // Set analytics tags for framework version
-  if (frameworkVersion && config.detection.getVersionBucket) {
-    const versionBucket = config.detection.getVersionBucket(frameworkVersion);
-    analytics.setTag(`${config.metadata.integration}-version`, versionBucket);
-  }
-
-  analytics.capture(WIZARD_INTERACTION_EVENT_NAME, {
-    action: 'started agent integration',
-    integration: config.metadata.integration,
-  });
-
-  // Get PostHog credentials
-  const { projectApiKey, host, accessToken } = await getOrAskForProjectData({
-    ...options,
-    cloudRegion,
-  });
-
-  // Gather framework-specific context (e.g., Next.js router, React Native platform)
-  const frameworkContext = config.metadata.gatherContext
-    ? await config.metadata.gatherContext(options)
-    : {};
-
-  // Set analytics tags from framework context
-  const contextTags = config.analytics.getTags(frameworkContext);
-  Object.entries(contextTags).forEach(([key, value]) => {
-    analytics.setTag(key, value);
-  });
-
   // Build integration prompt
-  const integrationPrompt = buildIntegrationPrompt(
-    config,
-    {
-      frameworkVersion: frameworkVersion || 'latest',
-      typescript: typeScriptDetected,
-      projectApiKey,
-      host,
-    },
-    frameworkContext,
-  );
+  const integrationPrompt = await buildIntegrationPrompt(config, {
+    frameworkVersion: frameworkVersion || 'latest',
+  });
+
+  if (options.debug) {
+    clack.log.info(`Integration prompt logged to: ${LOG_FILE_PATH}`);
+    clack.log.info(`Prompt preview: ${integrationPrompt.substring(0, 200)}...`);
+  }
 
   // Initialize and run agent
   const spinner = clack.spinner();
 
-  // Determine MCP URL: CLI flag > env var > production default
-  const mcpUrl = options.localMcp
-    ? 'http://localhost:8787/mcp'
-    : process.env.MCP_URL || 'https://mcp.posthog.com/mcp';
-
   const agent = initializeAgent(
     {
       workingDirectory: options.installDir,
-      posthogMcpUrl: mcpUrl,
-      posthogApiKey: accessToken,
-      posthogApiHost: host,
     },
     options,
   );
 
-  const agentResult = await runAgent(
-    agent,
-    integrationPrompt,
-    options,
-    spinner,
-    {
-      estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
-      spinnerMessage: SPINNER_MESSAGE,
-      successMessage: config.ui.successMessage,
-      errorMessage: 'Integration failed',
-    },
-  );
-
-  // Handle error cases detected in agent output
-  if (agentResult.error === AgentErrorType.MCP_MISSING) {
-    analytics.captureException(
-      new Error('Agent could not access PostHog MCP server'),
-      {
-        integration: config.metadata.integration,
-        error_type: AgentErrorType.MCP_MISSING,
-        signal: AgentSignals.ERROR_MCP_MISSING,
-      },
-    );
-
-    const errorMessage = `
-${chalk.red('❌ Could not access the PostHog MCP server')}
-
-The wizard was unable to connect to the PostHog MCP server.
-This could be due to a network issue or a configuration problem.
-
-Please try again, or set up ${
-      config.metadata.name
-    } manually by following our documentation:
-${chalk.cyan(config.metadata.docsUrl)}`;
-
-    clack.outro(errorMessage);
-    await analytics.shutdown('error');
-    process.exit(1);
-  }
-
-  if (agentResult.error === AgentErrorType.RESOURCE_MISSING) {
-    analytics.captureException(
-      new Error('Agent could not access setup resource'),
-      {
-        integration: config.metadata.integration,
-        error_type: AgentErrorType.RESOURCE_MISSING,
-        signal: AgentSignals.ERROR_RESOURCE_MISSING,
-      },
-    );
-
-    const errorMessage = `
-${chalk.red('❌ Could not access the setup resource')}
-
-The wizard could not access the setup resource. This may indicate a version mismatch or a temporary service issue.
-
-Please try again, or set up ${
-      config.metadata.name
-    } manually by following our documentation:
-${chalk.cyan(config.metadata.docsUrl)}`;
-
-    clack.outro(errorMessage);
-    await analytics.shutdown('error');
-    process.exit(1);
-  }
-
-  // Build environment variables from OAuth credentials
-  const envVars = config.environment.getEnvVars(projectApiKey, host);
-
-  // Upload environment variables to hosting providers (if configured)
-  let uploadedEnvVars: string[] = [];
-  if (config.environment.uploadToHosting) {
-    uploadedEnvVars = await uploadEnvironmentVariablesStep(envVars, {
-      integration: config.metadata.integration,
-      options,
-    });
-  }
-
-  // Add MCP server to clients
-  await addMCPServerToClientsStep({
-    cloudRegion,
-    integration: config.metadata.integration,
-    ci: options.ci,
+  await runAgent(agent, integrationPrompt, options, spinner, {
+    estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
+    spinnerMessage: SPINNER_MESSAGE,
+    successMessage: config.ui.successMessage,
+    errorMessage: 'Integration failed',
   });
 
   // Build outro message
-  const continueUrl = options.signup
-    ? `${getCloudUrlFromRegion(cloudRegion)}/products?source=wizard`
-    : undefined;
+  const changes = [...config.ui.getOutroChanges({})].filter(Boolean);
 
-  const changes = [
-    ...config.ui.getOutroChanges(frameworkContext),
-    Object.keys(envVars).length > 0
-      ? `Added environment variables to .env file`
-      : '',
-    uploadedEnvVars.length > 0
-      ? `Uploaded environment variables to your hosting provider`
-      : '',
-  ].filter(Boolean);
-
-  const nextSteps = [
-    ...config.ui.getOutroNextSteps(frameworkContext),
-    uploadedEnvVars.length === 0 && config.environment.uploadToHosting
-      ? `Upload your Project API key to your hosting provider`
-      : '',
-  ].filter(Boolean);
+  const nextSteps = [...config.ui.getOutroNextSteps({})].filter(Boolean);
 
   const outroMessage = `
-${chalk.green('Successfully installed PostHog!')}
+${chalk.green('Successfully installed raindrop.ai!')}
 
 ${chalk.cyan('What the agent did:')}
 ${changes.map((change) => `• ${change}`).join('\n')}
@@ -243,68 +102,61 @@ ${chalk.yellow('Next steps:')}
 ${nextSteps.map((step) => `• ${step}`).join('\n')}
 
 Learn more: ${chalk.cyan(config.metadata.docsUrl)}
-${continueUrl ? `\nContinue onboarding: ${chalk.cyan(continueUrl)}\n` : ``}
 ${chalk.dim(
   'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
-)}
-
-${chalk.dim(`How did this work for you? Drop us a line: wizard@posthog.com`)}`;
+)}`;
 
   clack.outro(outroMessage);
-
-  await analytics.shutdown('success');
 }
 
 /**
  * Build the integration prompt for the agent.
- * Uses shared base prompt with optional framework-specific addendum.
+ * Uses shared base prompt with optional framework-specific documentation.
  */
-function buildIntegrationPrompt(
+async function buildIntegrationPrompt(
   config: FrameworkConfig,
   context: {
     frameworkVersion: string;
-    typescript: boolean;
-    projectApiKey: string;
-    host: string;
   },
-  frameworkContext: Record<string, any>,
-): string {
-  const additionalLines = config.prompts.getAdditionalContextLines
-    ? config.prompts.getAdditionalContextLines(frameworkContext)
-    : [];
+): Promise<string> {
+  let documentation = '';
+  if (config.prompts.getDocumentation) {
+    try {
+      documentation = await config.prompts.getDocumentation();
+    } catch (error) {
+      logToFile('Error loading documentation:', error);
+      // Continue without documentation if loading fails
+    }
+  }
 
-  const additionalContext =
-    additionalLines.length > 0
-      ? '\n' + additionalLines.map((line) => `- ${line}`).join('\n')
-      : '';
+  const docsSection = documentation
+    ? `\n\nInstallation documentation:\n${documentation}\n`
+    : '';
 
-  return `You have access to the PostHog MCP server which provides an integration resource to integrate PostHog into this ${
-    config.metadata.name
-  } project.
+  return `Integrate raindrop.ai into this ${config.metadata.name} project that makes calls to the OpenAI API.
 
 Project context:
 - Framework: ${config.metadata.name} ${context.frameworkVersion}
-- TypeScript: ${context.typescript ? 'Yes' : 'No'}
-- PostHog API Key: ${context.projectApiKey}
-- PostHog Host: ${context.host}${additionalContext}
 
 Instructions:
 
-1. Call the PostHog MCP's resource for setup: posthog://workflows/basic-integration/begin
-2. Follow all instructions provided; do package installation as soon as possible.
-3. Set up environment variables for PostHog in a .env file with the API key and host provided above, using the appropriate naming convention for ${
-    config.metadata.name
-  }. Make sure to use these environment variables in the code files you create instead of hardcoding the API key and host.
+1. Install the raindrop.ai SDK package using the appropriate package manager for this project:
+   - Detect the package manager by checking for lockfiles or configuration files (e.g., package-lock.json/yarn.lock/pnpm-lock.yaml for Node.js, requirements.txt/poetry.lock/Pipfile for Python, etc.)
+   - Use the detected package manager to install the raindrop.ai SDK (e.g., npm/yarn/pnpm/bun for Node.js, pip/poetry/pipenv for Python)
+   - Do not manually edit package.json, requirements.txt, or lockfiles - use the package manager commands instead
 
-The PostHog MCP will provide specific integration code and instructions. Please follow them carefully. Be sure to look for lockfiles to determine the appropriate package manager to use when installing PostHog. Do not manually edit the package.json file.
+2. Integrate raindrop.ai where the project makes calls to the OpenAI API:
+   - Find files that contain OpenAI API client initialization, API calls, or request handlers
+   - Wrap or intercept OpenAI API calls with raindrop.ai to enable observability and tracing
+   - This may involve modifying OpenAI client initialization, adding middleware, or wrapping API call functions
+   - Generate a unique user ID for the integration (e.g., using UUID or a similar identifier generation method)
 
-Before beginning, confirm that you can access the PostHog MCP. If the PostHog MCP is not accessible, emit the following string:
+3. Initialize raindrop.ai with the appropriate configuration:
+   - Set up raindrop.ai client initialization with API keys
+   - Configure environment variables as needed
+   - Ensure raindrop.ai is properly integrated to capture OpenAI API interactions
 
-${AgentSignals.ERROR_MCP_MISSING} Could not access the PostHog MCP.
+4. Follow best practices for ${config.metadata.name} and ensure the integration doesn't break existing functionality.
 
-If the PostHog MCP is accessible, attempt to access the setup resource. If the setup resource is not accessible, emit the following string:
-
-${AgentSignals.ERROR_RESOURCE_MISSING} Could not access the setup resource.
-
-`;
+Focus on files where OpenAI API calls are made - these are the files that need to be modified to integrate raindrop.ai.${docsSection}`;
 }

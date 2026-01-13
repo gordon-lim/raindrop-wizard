@@ -1,8 +1,9 @@
 import readEnv from 'read-env';
-import { getPackageDotJson } from './clack-utils';
 import type { WizardOptions } from './types';
 import fg from 'fast-glob';
 import { IS_DEV } from '../lib/constants';
+import fs from 'fs';
+import path from 'path';
 
 export function isNonInteractiveEnvironment(): boolean {
   if (IS_DEV) {
@@ -17,7 +18,7 @@ export function isNonInteractiveEnvironment(): boolean {
 }
 
 export function readEnvironment(): Record<string, unknown> {
-  const result = readEnv('POSTHOG_WIZARD');
+  const result = readEnv('RAINDROP');
 
   return result;
 }
@@ -25,9 +26,24 @@ export function readEnvironment(): Record<string, unknown> {
 export async function detectEnvVarPrefix(
   options: WizardOptions,
 ): Promise<string> {
-  const packageJson = await getPackageDotJson(options);
+  let deps: Record<string, string> = {};
+  const packageJsonPath = path.join(options.installDir, 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJsonContent = await fs.promises.readFile(
+        packageJsonPath,
+        'utf-8',
+      );
+      const packageJson = JSON.parse(packageJsonContent);
+      deps = {
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.devDependencies || {}),
+      };
+    } catch {
+      // package.json exists but couldn't be read/parsed - continue without deps
+    }
+  }
 
-  const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
   const has = (name: string) => name in deps;
   const hasAnyFile = async (patterns: string[]) => {
     const matches = await fg(patterns, {

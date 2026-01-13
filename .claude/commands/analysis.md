@@ -1,1 +1,1 @@
-Review the most recent contents of /tmp/posthog-wizard.log. Look for 
+Review the most recent contents of /tmp/raindrop-ai-wizard.log. Look for 

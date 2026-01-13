@@ -5,7 +5,7 @@ import clack from './clack';
 
 let debugEnabled = false;
 
-export const LOG_FILE_PATH = '/tmp/posthog-wizard.log';
+export const LOG_FILE_PATH = '/tmp/raindrop-ai-wizard.log';
 
 /**
  * Initialize the log file with a run header.
@@ -14,12 +14,12 @@ export const LOG_FILE_PATH = '/tmp/posthog-wizard.log';
 export function initLogFile() {
   const header = `\n${'='.repeat(
     60,
-  )}\nPostHog Wizard Run: ${new Date().toISOString()}\n${'='.repeat(60)}\n`;
+  )}\nRaindrop Wizard Run: ${new Date().toISOString()}\n${'='.repeat(60)}\n`;
   appendFileSync(LOG_FILE_PATH, header);
 }
 
 /**
- * Log a message to the file at /tmp/posthog-wizard.log.
+ * Log a message to the file at /tmp/raindrop-ai-wizard.log.
  * Always writes regardless of debug flag.
  */
 export function logToFile(...args: unknown[]) {

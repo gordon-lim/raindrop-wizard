@@ -41,7 +41,7 @@
 
 ### Bug Fixes
 
-* Remove `posthog/agent`, directly integrate with CASDK ([#196](https://github.com/PostHog/wizard/issues/196)) ([db8e745](https://github.com/PostHog/wizard/commit/db8e745dc4bff5503ad734741e3bf5945ed4e46a))
+* Remove `PostHog/agent`, directly integrate with CASDK ([#196](https://github.com/PostHog/wizard/issues/196)) ([db8e745](https://github.com/PostHog/wizard/commit/db8e745dc4bff5503ad734741e3bf5945ed4e46a))
 
 ## [1.21.0](https://github.com/PostHog/wizard/compare/v1.20.0...v1.21.0) (2025-12-04)
 
@@ -116,7 +116,7 @@
 
 ### Features
 
-* @posthog/agent integrations for Next.js ([#160](https://github.com/PostHog/wizard/issues/160)) ([f95b78c](https://github.com/PostHog/wizard/commit/f95b78c6475a583f5e47c0af8650d77fe5a0ef49))
+* @PostHog/agent integrations for Next.js ([#160](https://github.com/PostHog/wizard/issues/160)) ([f95b78c](https://github.com/PostHog/wizard/commit/f95b78c6475a583f5e47c0af8650d77fe5a0ef49))
 
 ## [1.15.0](https://github.com/PostHog/wizard/compare/v1.14.0...v1.15.0) (2025-10-24)
 
@@ -357,7 +357,7 @@
 * allow install dir as a param ([55a326a](https://github.com/PostHog/wizard/commit/55a326a05b760fdb32b08fe2324bced529abb5eb))
 * analytics for the wizard ([70777c0](https://github.com/PostHog/wizard/commit/70777c0ea0d559218ed0ad350c9fea2395f89d82))
 * detect env var prefix + imports in react ([#13](https://github.com/PostHog/wizard/issues/13)) ([2f5e29d](https://github.com/PostHog/wizard/commit/2f5e29d6779d67576a86d668e874b34ba5944bb1))
-* posthog analytics setup ([4ee3719](https://github.com/PostHog/wizard/commit/4ee3719a336f0f23689124b496f79d22cb3ba112))
+* PostHog analytics setup ([4ee3719](https://github.com/PostHog/wizard/commit/4ee3719a336f0f23689124b496f79d22cb3ba112))
 * react support ([1140189](https://github.com/PostHog/wizard/commit/1140189acfb78c139e6f242152b46abb3dca5a8f))
 * **react-native:** react native wizard ([#18](https://github.com/PostHog/wizard/issues/18)) ([2a704f7](https://github.com/PostHog/wizard/commit/2a704f71b3e1407715037f7ab5126bb796b80453))
 * reverse proxy, get host from api ([307cd12](https://github.com/PostHog/wizard/commit/307cd121919f2c0d8a09ea6258a120fbe9e371f3))
@@ -368,7 +368,7 @@
 * **wip:** add core openai setup for nextjs ([2819694](https://github.com/PostHog/wizard/commit/281969439b585f9a878927f960f979cf7d2b529d))
 * **wip:** auth login ([4b11ead](https://github.com/PostHog/wizard/commit/4b11ead684db1fb59c2471dff50171121cd35dd9))
 * **wip:** initial setup ([aed6d6f](https://github.com/PostHog/wizard/commit/aed6d6f90e090376d8f0d3bb1470222be1ffbe50))
-* **wip:** login with posthog ([6cf2133](https://github.com/PostHog/wizard/commit/6cf2133f89fde192498990ecbd58135545d763c5))
+* **wip:** login with PostHog ([6cf2133](https://github.com/PostHog/wizard/commit/6cf2133f89fde192498990ecbd58135545d763c5))
 * **wip:** pull out nextjs internals ([e5cd0bf](https://github.com/PostHog/wizard/commit/e5cd0bfb1c61edb777b7ceb730ecefe59f0f787e))
 * **wip:** pulling out nextjs ([ae72ffd](https://github.com/PostHog/wizard/commit/ae72ffd77a5972a5a3a5f295a035289c9eb8e012))
 * **wip:** react setup ([7fb1d34](https://github.com/PostHog/wizard/commit/7fb1d34b01e94b5dcf0923ab3c9d6e12bd0a18a5))
@@ -383,7 +383,7 @@
 * add react option when not detected ([c318d6e](https://github.com/PostHog/wizard/commit/c318d6ea53c23c7e208d97cdcc1252176351dd6b))
 * add react option when not detected ([8fec618](https://github.com/PostHog/wizard/commit/8fec61888b9ecf8b535124ffac079d2b2fc90f76))
 * add shutdown ([587207d](https://github.com/PostHog/wizard/commit/587207dee635877b6a76fd162e84c1c59cb94557))
-* always add env vars, remove posthog-js and posthog-node from pages example app ([901bc9d](https://github.com/PostHog/wizard/commit/901bc9dd240742114cd3d5a9812363d709b3fa30))
+* always add env vars, remove PostHog-js and PostHog-node from pages example app ([901bc9d](https://github.com/PostHog/wizard/commit/901bc9dd240742114cd3d5a9812363d709b3fa30))
 * ask for eu cloud ([5fde909](https://github.com/PostHog/wizard/commit/5fde909287d1114f5fc888051009c888f264a2d5))
 * ask for eu cloud ([c84610a](https://github.com/PostHog/wizard/commit/c84610a3bf189256104445da57ac0705a170b811))
 * bump version ([b8ef000](https://github.com/PostHog/wizard/commit/b8ef000ae4a330c5d756ae80d0001a32683ad0df))

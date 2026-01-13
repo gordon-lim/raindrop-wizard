@@ -1,6 +1,5 @@
 import type { Integration } from '../../lib/constants';
 import { traceStep } from '../../telemetry';
-import { analytics } from '../../utils/analytics';
 import clack from '../../utils/clack';
 import { abortIfCancelled } from '../../utils/clack-utils';
 import type { WizardOptions } from '../../utils/types';
@@ -31,11 +30,6 @@ export const uploadEnvironmentVariablesStep = async (
   }
 
   if (!provider) {
-    analytics.capture('wizard interaction', {
-      action: 'not uploading environment variables',
-      reason: 'no environment provider found',
-      integration,
-    });
     return [];
   }
 
@@ -59,12 +53,6 @@ export const uploadEnvironmentVariablesStep = async (
   );
 
   if (!upload) {
-    analytics.capture('wizard interaction', {
-      action: 'not uploading environment variables',
-      reason: 'user declined to upload',
-      provider: provider.name,
-      integration,
-    });
     return [];
   }
 
@@ -74,12 +62,6 @@ export const uploadEnvironmentVariablesStep = async (
       return await provider.uploadEnvVars(envVars);
     },
   );
-
-  analytics.capture('wizard interaction', {
-    action: 'uploaded environment variables',
-    provider: provider.name,
-    integration,
-  });
 
   return Object.keys(results).filter((key) => results[key]);
 };

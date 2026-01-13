@@ -1,19 +1,19 @@
 import type { Integration } from '../lib/constants';
 import { traceStep } from '../telemetry';
-import { analytics } from '../utils/analytics';
 import clack from '../utils/clack';
 import {
-  getPackageDotJson,
   getUncommittedOrUntrackedFiles,
   isInGitRepo,
 } from '../utils/clack-utils';
+import fs from 'fs';
+import path from 'path';
 import { hasPackageInstalled } from '../utils/package-json';
 import type { WizardOptions } from '../utils/types';
 import * as childProcess from 'node:child_process';
 
 export async function runPrettierStep({
   installDir,
-  integration,
+  integration: _integration,
 }: Pick<WizardOptions, 'installDir'> & {
   integration: Integration;
 }): Promise<void> {
@@ -35,10 +35,20 @@ export async function runPrettierStep({
       return;
     }
 
-    const packageJson = await getPackageDotJson({ installDir });
+    let packageJson: any = {};
+    const packageJsonPath = path.join(installDir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        const packageJsonContent = await fs.promises.readFile(
+          packageJsonPath,
+          'utf-8',
+        );
+        packageJson = JSON.parse(packageJsonContent);
+      } catch {
+        // package.json exists but couldn't be read/parsed - continue without it
+      }
+    }
     const prettierInstalled = hasPackageInstalled('prettier', packageJson);
-
-    analytics.setTag('prettier-installed', prettierInstalled);
 
     if (!prettierInstalled) {
       return;
@@ -68,10 +78,5 @@ export async function runPrettierStep({
     }
 
     prettierSpinner.stop('Prettier has formatted your files.');
-
-    analytics.capture('wizard interaction', {
-      action: 'ran prettier',
-      integration,
-    });
   });
 }

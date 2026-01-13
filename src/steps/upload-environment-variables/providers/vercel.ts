@@ -5,7 +5,6 @@ import * as path from 'path';
 import type { WizardOptions } from '../../../utils/types';
 import clack from '../../../utils/clack';
 import chalk from 'chalk';
-import { analytics } from '../../../utils/analytics';
 
 export class VercelEnvironmentProvider extends EnvironmentProvider {
   name = 'Vercel';
@@ -20,8 +19,6 @@ export class VercelEnvironmentProvider extends EnvironmentProvider {
     const vercelDetected =
       this.hasVercelCli() && this.isProjectLinked() && this.isAuthenticated();
 
-    analytics.setTag('vercel-detected', vercelDetected);
-
     return vercelDetected;
   }
 
@@ -33,10 +30,8 @@ export class VercelEnvironmentProvider extends EnvironmentProvider {
   hasVercelCli(): boolean {
     try {
       execSync('vercel --version', { stdio: 'ignore' });
-      analytics.setTag('vercel-cli-installed', true);
       return true;
     } catch {
-      analytics.setTag('vercel-cli-installed', false);
       return false;
     }
   }
@@ -45,8 +40,6 @@ export class VercelEnvironmentProvider extends EnvironmentProvider {
     const isProjectLinked = fs.existsSync(
       path.join(this.options.installDir, '.vercel', 'project.json'),
     );
-
-    analytics.setTag('vercel-project-linked', isProjectLinked);
 
     return isProjectLinked;
   }
@@ -71,11 +64,8 @@ export class VercelEnvironmentProvider extends EnvironmentProvider {
       output.includes('vercel login') ||
       result.status !== 0
     ) {
-      analytics.setTag('vercel-authenticated', false);
       return false;
     }
-
-    analytics.setTag('vercel-authenticated', true);
 
     return true;
   }

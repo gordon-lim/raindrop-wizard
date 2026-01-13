@@ -1,30 +1,25 @@
-import {
-  IS_DEV,
-  POSTHOG_DEV_CLIENT_ID,
-  POSTHOG_EU_CLIENT_ID,
-  POSTHOG_US_CLIENT_ID,
-} from '../lib/constants';
+import { IS_DEV } from '../lib/constants';
 import type { CloudRegion } from './types';
 
 export const getAssetHostFromHost = (host: string) => {
-  if (host.includes('us.i.posthog.com')) {
-    return 'https://us-assets.i.posthog.com';
+  if (host.includes('us.i.raindrop.ai')) {
+    return 'https://us-assets.i.raindrop.ai';
   }
 
-  if (host.includes('eu.i.posthog.com')) {
-    return 'https://eu-assets.i.posthog.com';
+  if (host.includes('eu.i.raindrop.ai')) {
+    return 'https://eu-assets.i.raindrop.ai';
   }
 
   return host;
 };
 
 export const getUiHostFromHost = (host: string) => {
-  if (host.includes('us.i.posthog.com')) {
-    return 'https://us.posthog.com';
+  if (host.includes('us.i.raindrop.ai')) {
+    return 'https://us.raindrop.ai';
   }
 
-  if (host.includes('eu.i.posthog.com')) {
-    return 'https://eu.posthog.com';
+  if (host.includes('eu.i.raindrop.ai')) {
+    return 'https://eu.raindrop.ai';
   }
 
   return host;
@@ -36,10 +31,10 @@ export const getHostFromRegion = (region: CloudRegion) => {
   }
 
   if (region === 'eu') {
-    return 'https://eu.i.posthog.com';
+    return 'https://eu.i.raindrop.ai';
   }
 
-  return 'https://us.i.posthog.com';
+  return 'https://us.i.raindrop.ai';
 };
 
 export const getCloudUrlFromRegion = (region: CloudRegion) => {
@@ -48,21 +43,10 @@ export const getCloudUrlFromRegion = (region: CloudRegion) => {
   }
 
   if (region === 'eu') {
-    return 'https://eu.posthog.com';
+    return 'https://eu.raindrop.ai';
   }
 
-  return 'https://us.posthog.com';
-};
-
-export const getOauthClientIdFromRegion = (region: CloudRegion) => {
-  if (IS_DEV) {
-    return POSTHOG_DEV_CLIENT_ID;
-  }
-
-  if (region === 'us') {
-    return POSTHOG_US_CLIENT_ID;
-  }
-  return POSTHOG_EU_CLIENT_ID;
+  return 'https://us.raindrop.ai';
 };
 
 export const getLlmGatewayUrlFromHost = (host: string) => {
@@ -70,9 +54,9 @@ export const getLlmGatewayUrlFromHost = (host: string) => {
     return 'http://localhost:3308/wizard';
   }
 
-  if (host.includes('eu.posthog.com') || host.includes('eu.i.posthog.com')) {
-    return 'https://gateway.eu.posthog.com/wizard';
+  if (host.includes('eu.raindrop.ai') || host.includes('eu.i.raindrop.ai')) {
+    return 'https://gateway.eu.raindrop.ai/wizard';
   }
 
-  return 'https://gateway.us.posthog.com/wizard';
+  return 'https://gateway.us.raindrop.ai/wizard';
 };

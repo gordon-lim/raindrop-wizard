@@ -1,16 +1,14 @@
 import chalk from 'chalk';
 import type { Integration } from '../lib/constants';
 import { traceStep } from '../telemetry';
-import { analytics } from '../utils/analytics';
 import clack from '../utils/clack';
-import { getDotGitignore } from '../utils/file-utils';
 import * as fs from 'fs';
 import path from 'path';
 
 export async function addOrUpdateEnvironmentVariablesStep({
   installDir,
   variables,
-  integration,
+  integration: _integration,
 }: {
   installDir: string;
   variables: Record<string, string>;
@@ -87,12 +85,6 @@ export async function addOrUpdateEnvironmentVariablesStep({
           )}. Please update them manually.`,
         );
 
-        analytics.capture('wizard interaction', {
-          action: 'failed to update environment variables',
-          integration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-
         return {
           relativeEnvFilePath,
           addedEnvVariables,
@@ -119,12 +111,6 @@ export async function addOrUpdateEnvironmentVariablesStep({
           )} with environment variables. Please add them manually.`,
         );
 
-        analytics.capture('wizard interaction', {
-          action: 'failed to create environment variables',
-          integration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-
         return {
           relativeEnvFilePath,
           addedEnvVariables,
@@ -133,7 +119,10 @@ export async function addOrUpdateEnvironmentVariablesStep({
       }
     }
 
-    const gitignorePath = getDotGitignore({ installDir });
+    const gitignorePath = (() => {
+      const gitignorePath = path.join(installDir, '.gitignore');
+      return fs.existsSync(gitignorePath) ? gitignorePath : undefined;
+    })();
 
     const envFileName = path.basename(targetEnvFilePath);
 
@@ -167,12 +156,6 @@ export async function addOrUpdateEnvironmentVariablesStep({
             )} to include ${chalk.bold.cyan(envFileName)}.`,
           );
 
-          analytics.capture('wizard interaction', {
-            action: 'failed to update gitignore',
-            integration,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-
           return {
             relativeEnvFilePath,
             addedEnvVariables,
@@ -202,12 +185,6 @@ export async function addOrUpdateEnvironmentVariablesStep({
           )} with environment files.`,
         );
 
-        analytics.capture('wizard interaction', {
-          action: 'failed to create gitignore',
-          integration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-
         return {
           relativeEnvFilePath,
           addedEnvVariables,
@@ -215,11 +192,6 @@ export async function addOrUpdateEnvironmentVariablesStep({
         };
       }
     }
-
-    analytics.capture('wizard interaction', {
-      action: 'added environment variables',
-      integration,
-    });
 
     return {
       relativeEnvFilePath,

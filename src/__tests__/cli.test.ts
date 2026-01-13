@@ -1,13 +1,7 @@
 // Mock functions must be defined before imports
 const mockRunWizard = jest.fn();
-const mockRunMCPInstall = jest.fn();
-const mockRunMCPRemove = jest.fn();
 
 jest.mock('../run', () => ({ runWizard: mockRunWizard }));
-jest.mock('../mcp', () => ({
-  runMCPInstall: mockRunMCPInstall,
-  runMCPRemove: mockRunMCPRemove,
-}));
 jest.mock('semver', () => ({ satisfies: () => true }));
 
 describe('CLI argument parsing', () => {
@@ -21,11 +15,11 @@ describe('CLI argument parsing', () => {
 
     // Reset environment
     process.env = { ...originalEnv };
-    delete process.env.POSTHOG_WIZARD_REGION;
-    delete process.env.POSTHOG_WIZARD_DEFAULT;
-    delete process.env.POSTHOG_WIZARD_CI;
-    delete process.env.POSTHOG_WIZARD_API_KEY;
-    delete process.env.POSTHOG_WIZARD_INSTALL_DIR;
+    delete process.env.RAINDROP_WIZARD_REGION;
+    delete process.env.RAINDROP_WIZARD_DEFAULT;
+    delete process.env.RAINDROP_WIZARD_CI;
+    delete process.env.RAINDROP_WIZARD_API_KEY;
+    delete process.env.RAINDROP_WIZARD_INSTALL_DIR;
 
     // Mock process.exit to prevent test runner from exiting
     process.exit = jest.fn() as any;
@@ -103,8 +97,8 @@ describe('CLI argument parsing', () => {
   });
 
   describe('environment variables', () => {
-    test('respects POSTHOG_WIZARD_REGION', async () => {
-      process.env.POSTHOG_WIZARD_REGION = 'eu';
+    test('respects RAINDROP_WIZARD_REGION', async () => {
+      process.env.RAINDROP_WIZARD_REGION = 'eu';
 
       await runCLI([]);
 
@@ -112,8 +106,8 @@ describe('CLI argument parsing', () => {
       expect(args.region).toBe('eu');
     });
 
-    test('respects POSTHOG_WIZARD_DEFAULT', async () => {
-      process.env.POSTHOG_WIZARD_DEFAULT = 'false';
+    test('respects RAINDROP_WIZARD_DEFAULT', async () => {
+      process.env.RAINDROP_WIZARD_DEFAULT = 'false';
 
       await runCLI([]);
 
@@ -122,8 +116,8 @@ describe('CLI argument parsing', () => {
     });
 
     test('CLI args override environment variables', async () => {
-      process.env.POSTHOG_WIZARD_REGION = 'us';
-      process.env.POSTHOG_WIZARD_DEFAULT = 'false';
+      process.env.RAINDROP_WIZARD_REGION = 'us';
+      process.env.RAINDROP_WIZARD_DEFAULT = 'false';
 
       await runCLI(['--region', 'eu', '--default']);
 
@@ -164,30 +158,6 @@ describe('CLI argument parsing', () => {
       // New defaults
       expect(args.default).toBe(true);
       expect(args.region).toBeUndefined();
-    });
-  });
-
-  describe('mcp commands', () => {
-    test('mcp add region is undefined when not specified', async () => {
-      await runCLI(['mcp', 'add']);
-
-      const args = getLastCallArgs(mockRunMCPInstall);
-      expect(args.region).toBeUndefined();
-    });
-
-    test('mcp add respects --region flag', async () => {
-      await runCLI(['mcp', 'add', '--region', 'eu']);
-
-      const args = getLastCallArgs(mockRunMCPInstall);
-      expect(args.region).toBe('eu');
-    });
-
-    test('mcp commands inherit global flags', async () => {
-      await runCLI(['mcp', 'add', '--no-default', '--debug']);
-
-      const args = getLastCallArgs(mockRunMCPInstall);
-      expect(args.default).toBe(false);
-      expect(args.debug).toBe(true);
     });
   });
 
@@ -255,11 +225,11 @@ describe('CLI argument parsing', () => {
   });
 
   describe('CI environment variables', () => {
-    test('respects POSTHOG_WIZARD_CI', async () => {
-      process.env.POSTHOG_WIZARD_CI = 'true';
-      process.env.POSTHOG_WIZARD_REGION = 'us';
-      process.env.POSTHOG_WIZARD_API_KEY = 'phx_env_key';
-      process.env.POSTHOG_WIZARD_INSTALL_DIR = '/tmp/test';
+    test('respects RAINDROP_WIZARD_CI', async () => {
+      process.env.RAINDROP_WIZARD_CI = 'true';
+      process.env.RAINDROP_WIZARD_REGION = 'us';
+      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
+      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
 
       await runCLI([]);
 
@@ -267,11 +237,11 @@ describe('CLI argument parsing', () => {
       expect(args.ci).toBe(true);
     });
 
-    test('respects POSTHOG_WIZARD_API_KEY', async () => {
-      process.env.POSTHOG_WIZARD_CI = 'true';
-      process.env.POSTHOG_WIZARD_REGION = 'eu';
-      process.env.POSTHOG_WIZARD_API_KEY = 'phx_env_key';
-      process.env.POSTHOG_WIZARD_INSTALL_DIR = '/tmp/test';
+    test('respects RAINDROP_WIZARD_API_KEY', async () => {
+      process.env.RAINDROP_WIZARD_CI = 'true';
+      process.env.RAINDROP_WIZARD_REGION = 'eu';
+      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
+      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
 
       await runCLI([]);
 
@@ -280,10 +250,10 @@ describe('CLI argument parsing', () => {
     });
 
     test('CLI args override CI environment variables', async () => {
-      process.env.POSTHOG_WIZARD_CI = 'true';
-      process.env.POSTHOG_WIZARD_REGION = 'us';
-      process.env.POSTHOG_WIZARD_API_KEY = 'phx_env_key';
-      process.env.POSTHOG_WIZARD_INSTALL_DIR = '/tmp/test';
+      process.env.RAINDROP_WIZARD_CI = 'true';
+      process.env.RAINDROP_WIZARD_REGION = 'us';
+      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
+      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
 
       await runCLI([
         '--region',

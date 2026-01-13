@@ -1,146 +1,112 @@
-import { getPackageDotJson } from '../utils/clack-utils';
-import { hasPackageInstalled } from '../utils/package-json';
 import type { WizardOptions } from '../utils/types';
 import { Integration } from './constants';
+import fs from 'fs';
+import path from 'path';
+import fg from 'fast-glob';
 
 type IntegrationConfig = {
-  name: string;
-  filterPatterns: string[];
-  ignorePatterns: string[];
   detect: (options: Pick<WizardOptions, 'installDir'>) => Promise<boolean>;
-  generateFilesRules: string;
-  filterFilesRules: string;
   docsUrl: string;
-  nextSteps: string;
-  defaultChanges: string;
 };
 
+async function detectPythonProject(
+  options: Pick<WizardOptions, 'installDir'>,
+): Promise<boolean> {
+  // Check for Python files
+  const pythonFiles = await fg('**/*.py', {
+    cwd: options.installDir,
+    ignore: [
+      '**/node_modules/**',
+      '**/__pycache__/**',
+      '**/.venv/**',
+      '**/venv/**',
+    ],
+    onlyFiles: true,
+  });
+
+  if (pythonFiles.length > 0) {
+    return true;
+  }
+
+  // Check for Python project files
+  const pythonProjectFiles = [
+    'requirements.txt',
+    'setup.py',
+    'pyproject.toml',
+    'Pipfile',
+    'poetry.lock',
+  ];
+
+  for (const file of pythonProjectFiles) {
+    const filePath = path.join(options.installDir, file);
+    if (fs.existsSync(filePath)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function detectTypeScriptProject(
+  options: Pick<WizardOptions, 'installDir'>,
+): Promise<boolean> {
+  // Check for tsconfig.json
+  const tsconfigPath = path.join(options.installDir, 'tsconfig.json');
+  if (fs.existsSync(tsconfigPath)) {
+    return true;
+  }
+
+  // Check for TypeScript files
+  const tsFiles = await fg('**/*.{ts,tsx}', {
+    cwd: options.installDir,
+    ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+    onlyFiles: true,
+  });
+
+  if (tsFiles.length > 0) {
+    return true;
+  }
+
+  // Check for TypeScript in package.json (if it exists)
+  const packageJsonPath = path.join(options.installDir, 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJsonContent = await fs.promises.readFile(
+        packageJsonPath,
+        'utf-8',
+      );
+      const packageJson = JSON.parse(packageJsonContent);
+      const deps = {
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.devDependencies || {}),
+      };
+      if (
+        'typescript' in deps ||
+        '@types/node' in deps ||
+        '@types/react' in deps
+      ) {
+        return true;
+      }
+    } catch {
+      // package.json exists but couldn't be read/parsed - skip this check
+    }
+  }
+
+  return false;
+}
+
 export const INTEGRATION_CONFIG = {
-  [Integration.nextjs]: {
-    name: 'Next.js',
-    filterPatterns: ['**/*.{tsx,ts,jsx,js,mjs,cjs}'],
-    ignorePatterns: [
-      'node_modules',
-      'dist',
-      'build',
-      'public',
-      'static',
-      'next-env.d.*',
-    ],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('next', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl: 'https://posthog.com/docs/libraries/next-js',
-    defaultChanges:
-      '• Installed posthog-js & posthog-node packages\n• Initialized PostHog and added pageview tracking\n• Created a PostHogClient to use PostHog server-side\n• Setup a reverse proxy to avoid ad blockers blocking analytics requests',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Call posthog.capture() to capture custom events in your app',
+  [Integration.python]: {
+    detect: detectPythonProject,
+    docsUrl: 'https://www.raindrop.ai/docs/sdk/python',
   },
-  [Integration.react]: {
-    name: 'React',
-    filterPatterns: ['**/*.{tsx,ts,jsx,js}'],
-    ignorePatterns: [
-      'node_modules',
-      'dist',
-      'build',
-      'public',
-      'static',
-      'assets',
-    ],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('react', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl: 'https://posthog.com/docs/libraries/react',
-    defaultChanges:
-      '• Installed posthog-js package\n• Added PostHogProvider to the root of the app, to initialize PostHog and enable autocapture',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Call posthog.capture() to capture custom events in your app',
-  },
-  [Integration.svelte]: {
-    name: 'Svelte',
-    filterPatterns: ['**/*.{svelte,ts,js,jsx,tsx}'],
-    ignorePatterns: ['node_modules', 'dist', 'build', 'public', 'static'],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('@sveltejs/kit', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl: 'https://posthog.com/docs/libraries/svelte',
-    defaultChanges:
-      '• Installed posthog-js & posthog-node packages\n• Added PostHog initialization to your Svelte app\n• Setup pageview & pageleave tracking\n• Setup event auto - capture to capture events as users interact with your app\n• Added a getPostHogClient() function to use PostHog server-side',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Use getPostHogClient() to start capturing events server - side',
-  },
-  [Integration.reactNative]: {
-    name: 'React Native',
-    filterPatterns: ['**/*.{ts,js,jsx,tsx}'],
-    ignorePatterns: ['node_modules', 'dist', 'build', 'public', 'static'],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('react-native', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl: 'https://posthog.com/docs/libraries/react-native',
-    defaultChanges:
-      '• Installed required packages\n• Added PostHogProvider to the root of the app\n• Enabled autocapture and session replay',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Call posthog.capture() to capture custom events in your app',
-  },
-  [Integration.astro]: {
-    name: 'Astro',
-    filterPatterns: ['**/*.{astro,ts,js,jsx,tsx}'],
-    ignorePatterns: ['node_modules', 'dist', 'build', 'public', 'static'],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('astro', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl: 'https://posthog.com/docs/libraries/js',
-    defaultChanges:
-      '• Added PostHog component with initialization script\n• Created PostHogLayout for consistent analytics tracking',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Call posthog.capture() to capture custom events in your app\n• Use posthog.isFeatureEnabled() for feature flags',
-  },
-  [Integration.reactRouter]: {
-    name: 'React Router',
-    filterPatterns: ['**/*.{tsx,ts,jsx,js}'],
-    ignorePatterns: [
-      'node_modules',
-      'dist',
-      'build',
-      'public',
-      'static',
-      'assets',
-    ],
-    detect: async (options) => {
-      const packageJson = await getPackageDotJson(options);
-      return hasPackageInstalled('react-router', packageJson);
-    },
-    generateFilesRules: '',
-    filterFilesRules: '',
-    docsUrl:
-      'https://posthog-git-react-post-hog.vercel.app/docs/libraries/react-router',
-    defaultChanges:
-      '• Installed posthog-js package\n• Added PostHogProvider to the root of the app\n• Integrated PostHog with React Router for pageview tracking',
-    nextSteps:
-      '• Call posthog.identify() when a user signs into your app\n• Call posthog.capture() to capture custom events in your app',
+  [Integration.typescript]: {
+    detect: detectTypeScriptProject,
+    docsUrl: 'https://www.raindrop.ai/docs/sdk/typescript',
   },
 } as const satisfies Record<Integration, IntegrationConfig>;
 
 export const INTEGRATION_ORDER = [
-  Integration.nextjs,
-  Integration.astro,
-  Integration.svelte,
-  Integration.reactNative,
-  Integration.reactRouter,
-  Integration.react,
+  Integration.python,
+  Integration.typescript,
 ] as const;

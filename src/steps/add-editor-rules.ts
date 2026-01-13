@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import chalk from 'chalk';
 import path from 'path';
 import { Integration } from '../lib/constants';
-import { analytics } from '../utils/analytics';
 import clack from '../utils/clack';
 import { traceStep } from '../telemetry';
 
@@ -15,7 +14,7 @@ type AddEditorRulesStepOptions = {
 export const addEditorRulesStep = async ({
   installDir,
   rulesName,
-  integration,
+  integration: _integration,
 }: AddEditorRulesStepOptions): Promise<boolean> => {
   // Add rules file if in Cursor environment
   if (process.env.CURSOR_TRACE_ID) {
@@ -46,19 +45,14 @@ export const addEditorRulesStep = async ({
         '{universal}',
         universalRules,
       );
-      const targetPath = path.join(docsDir, 'posthog-integration.mdc');
+      const targetPath = path.join(docsDir, 'raindrop-integration.mdc');
 
       // Write the combined rules
       await fs.promises.writeFile(targetPath, combinedRules, 'utf8');
 
-      analytics.capture('wizard interaction', {
-        action: 'added editor rules',
-        integration,
-      });
-
       clack.log.info(
         `Added Cursor rules to ${chalk.bold.cyan(
-          `.cursor/rules/posthog-integration.mdc`,
+          `.cursor/rules/raindrop-integration.mdc`,
         )}`,
       );
 
