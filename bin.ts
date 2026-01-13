@@ -22,19 +22,6 @@ import { runWizard } from './src/run';
 import { isNonInteractiveEnvironment } from './src/utils/environment';
 import clack from './src/utils/clack';
 
-if (process.env.NODE_ENV === 'test') {
-  void (async () => {
-    try {
-      const { server } = await import('./e2e-tests/mocks/server.js');
-      server.listen({
-        onUnhandledRequest: 'bypass',
-      });
-    } catch (error) {
-      // Mock server import failed - this can happen during non-E2E tests
-    }
-  })();
-}
-
 yargs(hideBin(process.argv))
   .env('RAINDROP')
   // global options

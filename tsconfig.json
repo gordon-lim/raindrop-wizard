@@ -18,11 +18,7 @@
     "spec/**/*",
     "src/**/*",
     "test/**/*",
-    "e2e-tests/**/*",
     "types/**/*"
-  ],
-  "exclude": [
-    "e2e-tests/test-applications/**/*"
   ],
   "ts-node": {
     "files": true
