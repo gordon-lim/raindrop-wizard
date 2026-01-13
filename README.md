@@ -2,6 +2,11 @@
   <img alt="raindrop.ai logo" src="https://user-images.githubusercontent.com/65415371/205059737-c8a4f836-4889-4654-902e-f302b187b6a0.png">
 </p>
 
+> **⚠️ Experimental:** This wizard is still in an experimental phase. The wizard
+> only works with **TypeScript and Python** integrations and only works reliably
+> for integrating the tracing feature to see your AI interactions on
+> raindrop.
+
 > **ℹ️ Acknowledgement:** This project is a fork of [PostHog's wizard](https://github.com/PostHog/wizard).
 
 
