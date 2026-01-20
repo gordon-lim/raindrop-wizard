@@ -7,7 +7,7 @@ import { ISSUES_URL } from '../lib/constants';
 import { abort } from './clack-utils';
 
 const PROPELAUTH_AUTH_URL = 'https://9260183011.propelauthtest.com'; // TEST URL
-const OAUTH_PORT = 3000;
+const OAUTH_PORT = 8259;
 
 const OAUTH_CALLBACK_STYLES = `
   <style>
@@ -46,6 +46,9 @@ async function startCallbackServer(): Promise<{
   waitForCallback: () => Promise<void>;
 }> {
   return new Promise((resolve, reject) => {
+
+    clack.log.info(`Starting OAuth callback server on port ${OAUTH_PORT}`);
+
     let callbackResolve: () => void;
     let callbackReject: (error: Error) => void;
 
@@ -56,14 +59,20 @@ async function startCallbackServer(): Promise<{
       });
 
     const server = http.createServer((req, res) => {
+      clack.log.info(`Incoming request - Method: ${req.method}, URL: ${req.url || '(missing)'}`);
+
       if (!req.url) {
+        clack.log.warn('Request received but req.url is missing');
         res.writeHead(400);
         res.end();
         return;
       }
+
       const url = new URL(req.url, `http://localhost:${OAUTH_PORT}`);
+      clack.log.info(`OAuth callback received - Full URL: ${url.toString()}`);
 
       if (url.pathname === '/callback') {
+        clack.log.info(`OAuth callback path matched - Query params: ${url.search}`);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`
           <html>
@@ -97,6 +106,8 @@ async function startCallbackServer(): Promise<{
         `);
       }
     });
+
+    clack.log.info(`OAuth callback server started on port ${OAUTH_PORT}`);
 
     server.listen(OAUTH_PORT, () => {
       resolve({ server, waitForCallback });
