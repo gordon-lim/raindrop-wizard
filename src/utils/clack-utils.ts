@@ -7,6 +7,7 @@ import type { WizardOptions } from './types';
 import type { Integration } from '../lib/constants';
 import clack from './clack';
 import { INTEGRATION_CONFIG } from '../lib/config';
+import { performOAuthFlow } from './oauth';
 
 export function abort(message?: string, status?: number): never {
   clack.outro(message ?? 'Wizard setup cancelled.');
@@ -29,8 +30,7 @@ export async function abortIfCancelled<T>(
       : 'https://raindrop.com/docs';
 
     clack.cancel(
-      `Wizard setup cancelled. You can read the documentation for ${
-        integration ?? 'Raindrop'
+      `Wizard setup cancelled. You can read the documentation for ${integration ?? 'Raindrop'
       } at ${chalk.cyan(docsUrl)} to continue with the setup manually.`,
     );
     process.exit(0);
@@ -62,11 +62,11 @@ export async function confirmContinueIfNoOrDirtyGitRepo(
       const continueWithoutGit = options.default
         ? true
         : await abortIfCancelled(
-            clack.confirm({
-              message:
-                'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
-            }),
-          );
+          clack.confirm({
+            message:
+              'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
+          }),
+        );
 
       if (!continueWithoutGit) {
         abort(undefined, 0);
@@ -134,24 +134,60 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
     const aiConsent = options.default
       ? true
       : await abortIfCancelled(
-          clack.select({
-            message: 'This setup wizard uses AI, are you happy to continue? ✨',
-            options: [
-              {
-                label: 'Yes',
-                value: true,
-                hint: 'We will use AI to help you setup Raindrop quickly',
-              },
-              {
-                label: 'No',
-                value: false,
-                hint: "I don't like AI",
-              },
-            ],
-            initialValue: true,
-          }),
-        );
+        clack.select({
+          message: 'This setup wizard uses AI, are you happy to continue? ✨',
+          options: [
+            {
+              label: 'Yes',
+              value: true,
+              hint: 'We will use AI to help you setup Raindrop quickly',
+            },
+            {
+              label: 'No',
+              value: false,
+              hint: "I don't like AI",
+            },
+          ],
+          initialValue: true,
+        }),
+      );
 
     return aiConsent;
   });
+}
+
+export async function askForWizardLogin(options: {
+  signup: boolean;
+}): Promise<object> {
+  const tokenResponse = await performOAuthFlow({
+    scopes: [
+      'user:read',
+      'project:read',
+      'introspection',
+      'llm_gateway:read',
+      'dashboard:write',
+      'insight:write',
+    ],
+    signup: options.signup,
+  });
+
+  const projectId = tokenResponse.scoped_teams?.[0];
+
+  if (projectId === undefined) {
+    const error = new Error(
+      'No project access granted. Please authorize with project-level access.',
+    );
+    clack.log.error(error.message);
+    await abort();
+  }
+
+  const cloudUrl = 'https://us.raindrop.ai';
+  const host = 'https://us.i.raindrop.ai';
+
+
+  clack.log.success(
+    `Login complete. ${options.signup ? 'Welcome to PostHog! 🎉' : ''}`,
+  );
+
+  return {};
 }
