@@ -71,6 +71,20 @@ The agent uses the `ANTHROPIC_API_KEY` environment variable to authenticate with
 
 ## Running locally
 
+First, install `pnpm`, run:
+
+```bash
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+```
+
+then,
+
+```bash
+pnpm install
+pnpm build
+pnpm link --global
+```
+
 ### Quick test without linking
 
 ```bash

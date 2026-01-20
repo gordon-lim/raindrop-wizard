@@ -15,6 +15,7 @@ import path from 'path';
 import clack from '../utils/clack';
 import { initializeAgent, runAgent } from './agent-interface';
 import { logToFile, LOG_FILE_PATH } from '../utils/debug';
+import { askForWizardLogin } from '../utils/clack-utils';
 import chalk from 'chalk';
 
 /**
@@ -60,6 +61,8 @@ export async function runAgentWizard(
 
   const frameworkVersion = config.detection.getVersion(packageJson);
 
+  const data = await askForWizardLogin({ signup: false });
+
   // Build integration prompt
   const integrationPrompt = await buildIntegrationPrompt(config, {
     frameworkVersion: frameworkVersion || 'latest',
@@ -103,8 +106,8 @@ ${nextSteps.map((step) => `• ${step}`).join('\n')}
 
 Learn more: ${chalk.cyan(config.metadata.docsUrl)}
 ${chalk.dim(
-  'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
-)}`;
+    'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
+  )}`;
 
   clack.outro(outroMessage);
 }
