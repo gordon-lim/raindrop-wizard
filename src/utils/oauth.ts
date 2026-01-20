@@ -5,12 +5,16 @@ import chalk from 'chalk';
 import opn from 'opn';
 import { z } from 'zod';
 import clack from './clack';
-import { ISSUES_URL } from '../lib/constants';
+import {
+  ISSUES_URL,
+  OAUTH_AUTHORIZE_URL,
+  OAUTH_CLIENT_ID,
+  OAUTH_CLIENT_SECRET,
+  OAUTH_PORT,
+  OAUTH_TOKEN_URL,
+  OAUTH_USERINFO_URL,
+} from '../lib/constants';
 import { abort } from './clack-utils';
-
-const OAUTH_URL = 'https://9260183011.propelauthtest.com'; // TEST URL
-const OAUTH_CLIENT_ID = '5dae0659f17a0522c551548d8a87e1f6';
-const OAUTH_PORT = 3000;
 
 const OAUTH_CALLBACK_STYLES = `
   <style>
@@ -39,13 +43,26 @@ const OAuthTokenResponseSchema = z.object({
   access_token: z.string(),
   expires_in: z.number(),
   token_type: z.string(),
-  scope: z.string(),
-  refresh_token: z.string(),
+  scope: z.string().optional(),
+  refresh_token: z.string().optional(),
   scoped_teams: z.array(z.number()).optional(),
   scoped_organizations: z.array(z.string()).optional(),
 });
 
+const OAuthUserInfoSchema = z.object({
+  user_id: z.string(),
+  email: z.string(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  picture_url: z.string().optional(),
+  org_id_to_org_info: z.record(z.string(), z.object({
+    org_id: z.string(),
+    org_name: z.string(),
+  })).optional(),
+});
+
 export type OAuthTokenResponse = z.infer<typeof OAuthTokenResponseSchema>;
+export type OAuthUserInfo = z.infer<typeof OAuthUserInfoSchema>;
 
 interface OAuthConfig {
   scopes: string[];
@@ -105,7 +122,7 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>PostHog wizard - Authorization ${isAccessDenied ? 'cancelled' : 'failed'
+              <title>Raindrop wizard - Authorization ${isAccessDenied ? 'cancelled' : 'failed'
           }</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
@@ -129,11 +146,11 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>PostHog wizard is ready</title>
+              <title>Raindrop wizard is ready</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
             <body>
-              <p>PostHog login complete!</p>
+              <p>Raindrop login complete!</p>
               <p>Return to your terminal: the wizard is hard at work on your project<span class="blink">█</span></p>
               <script>window.close();</script>
             </body>
@@ -146,7 +163,7 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>PostHog wizard - Invalid request</title>
+              <title>Raindrop wizard - Invalid request</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
             <body>
@@ -169,26 +186,31 @@ async function startCallbackServer(
 async function exchangeCodeForToken(
   code: string,
   codeVerifier: string,
-  config: OAuthConfig,
 ): Promise<OAuthTokenResponse> {
+  const params = new URLSearchParams();
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', `http://localhost:${OAUTH_PORT}/callback`);
+  params.append('client_id', OAUTH_CLIENT_ID);
+  params.append('code_verifier', codeVerifier);
 
-  const response = await axios.post(
-    `${OAUTH_URL}/propelauth/oauth/token`,
-    {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: `http://localhost:${OAUTH_PORT}/callback`,
-      client_id: OAUTH_CLIENT_ID,
-      code_verifier: codeVerifier,
+  const response = await axios.post(OAUTH_TOKEN_URL, params.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    },
-  );
+  });
 
   return OAuthTokenResponseSchema.parse(response.data);
+}
+
+export async function getUserInfo(accessToken: string): Promise<OAuthUserInfo> {
+  const response = await axios.get(OAUTH_USERINFO_URL, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return OAuthUserInfoSchema.parse(response.data);
 }
 
 export async function performOAuthFlow(
@@ -197,20 +219,19 @@ export async function performOAuthFlow(
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
 
-  const authUrl = new URL(`${OAUTH_URL}/propelauth/oauth/authorize`);
+  const authUrl = new URL(OAUTH_AUTHORIZE_URL);
   authUrl.searchParams.set('client_id', OAUTH_CLIENT_ID);
   authUrl.searchParams.set(
     'redirect_uri',
-    `http://localhost:${OAUTH_PORT}/propelauth/oauth/callback`,
+    `http://localhost:${OAUTH_PORT}/callback`,
   );
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('scope', config.scopes.join(' '));
-  authUrl.searchParams.set('required_access_level', 'project');
 
   const signupUrl = new URL(
-    `${OAUTH_URL}/propelauth/oauth/signup?next=${encodeURIComponent(authUrl.toString())}`,
+    `${OAUTH_AUTHORIZE_URL.replace('/authorize', '/signup')}?next=${encodeURIComponent(authUrl.toString())}`,
   );
 
   const localSignupUrl = `http://localhost:${OAUTH_PORT}/authorize?signup=true`;
@@ -225,7 +246,7 @@ export async function performOAuthFlow(
 
   clack.log.info(
     `${chalk.bold(
-      "If the browser window didn't open automatically, please open the following link to be redirected to PostHog:",
+      "If the browser window didn't open automatically, please open the following link to be redirected to Raindrop:",
     )}\n\n${chalk.cyan(urlToOpen)}${config.signup
       ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
         localLoginUrl,
@@ -251,7 +272,7 @@ export async function performOAuthFlow(
       ),
     ]);
 
-    const token = await exchangeCodeForToken(code, codeVerifier, config);
+    const token = await exchangeCodeForToken(code, codeVerifier);
 
     server.close();
     loginSpinner.stop('Authorization complete!');
@@ -269,7 +290,7 @@ export async function performOAuthFlow(
       clack.log.info(
         `${chalk.yellow(
           'Authorization was cancelled.',
-        )}\n\nYou denied access to PostHog. To use the wizard, you need to authorize access to your PostHog account.\n\n${chalk.dim(
+        )}\n\nYou denied access to Raindrop. To use the wizard, you need to authorize access to your Raindrop account.\n\n${chalk.dim(
           'You can try again by re-running the wizard.',
         )}`,
       );
@@ -277,7 +298,7 @@ export async function performOAuthFlow(
       clack.log.error(
         `${chalk.red('Authorization failed:')}\n\n${error.message
         }\n\n${chalk.dim(
-          `If you think this is a bug in the PostHog wizard, please create an issue:\n${ISSUES_URL}`,
+          `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
         )}`,
       );
     }

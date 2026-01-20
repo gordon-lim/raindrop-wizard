@@ -7,7 +7,7 @@ import type { WizardOptions } from './types';
 import type { Integration } from '../lib/constants';
 import clack from './clack';
 import { INTEGRATION_CONFIG } from '../lib/config';
-import { performOAuthFlow } from './oauth';
+import { getUserInfo, performOAuthFlow } from './oauth';
 
 export function abort(message?: string, status?: number): never {
   clack.outro(message ?? 'Wizard setup cancelled.');
@@ -171,7 +171,9 @@ export async function askForWizardLogin(options: {
     signup: options.signup,
   });
 
-  const projectId = tokenResponse.scoped_teams?.[0];
+  const userInfo = await getUserInfo(tokenResponse.access_token);
+  const orgIds = Object.keys(userInfo.org_id_to_org_info || {});
+  const projectId = orgIds[0];
 
   if (projectId === undefined) {
     const error = new Error(
@@ -181,12 +183,9 @@ export async function askForWizardLogin(options: {
     await abort();
   }
 
-  const cloudUrl = 'https://us.raindrop.ai';
-  const host = 'https://us.i.raindrop.ai';
-
 
   clack.log.success(
-    `Login complete. ${options.signup ? 'Welcome to PostHog! 🎉' : ''}`,
+    `Login complete. ${options.signup ? 'Welcome to Raindrop! 🎉' : ''}`,
   );
 
   return {};
