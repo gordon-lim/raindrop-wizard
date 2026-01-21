@@ -1,6 +1,7 @@
 export enum Integration {
   python = 'python',
   typescript = 'typescript',
+  vercelAiSdk = 'vercel-ai-sdk',
 }
 
 export function getIntegrationDescription(type: string): string {
@@ -9,6 +10,8 @@ export function getIntegrationDescription(type: string): string {
       return 'Python';
     case Integration.typescript:
       return 'TypeScript';
+    case Integration.vercelAiSdk:
+      return 'Vercel AI SDK';
     default:
       throw new Error(`Unknown integration ${type}`);
   }

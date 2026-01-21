@@ -39,8 +39,11 @@ export interface FrameworkDetection {
 export interface PromptConfig {
   /**
    * Optional: Get documentation content to include in the prompt
+   * @param context Optional context for parameterized documentation (e.g., otelProvider)
    */
-  getDocumentation?: () => Promise<string>;
+  getDocumentation?: (context?: {
+    otelProvider?: string;
+  }) => Promise<string>;
 }
 
 /**
@@ -64,7 +67,7 @@ export interface UIConfig {
  * Generate welcome message from framework name
  */
 export function getWelcomeMessage(frameworkName: string): string {
-  return `Raindrop ${frameworkName} wizard (agent-powered)`;
+  return `Raindrop ${frameworkName} wizard`;
 }
 
 /**

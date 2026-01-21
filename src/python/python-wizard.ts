@@ -21,7 +21,7 @@ const PYTHON_AGENT_CONFIG: FrameworkConfig = {
   },
 
   prompts: {
-    getDocumentation: async () => {
+    getDocumentation: async (context) => {
       try {
         // __dirname in compiled code is dist/src/python/, so go up to project root then to src/python/docs.md
         const docsPath = path.resolve(__dirname, '../../../src/python/docs.md');

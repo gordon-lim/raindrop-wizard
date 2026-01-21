@@ -95,6 +95,62 @@ async function detectTypeScriptProject(
   return false;
 }
 
+async function detectVercelAiSdkProject(
+  options: Pick<WizardOptions, 'installDir'>,
+): Promise<boolean> {
+  // Check for 'ai' package in package.json
+  const packageJsonPath = path.join(options.installDir, 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJsonContent = await fs.promises.readFile(
+        packageJsonPath,
+        'utf-8',
+      );
+      const packageJson = JSON.parse(packageJsonContent);
+      const deps = {
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.devDependencies || {}),
+      };
+
+      // Check for 'ai' package or AI SDK providers
+      if ('ai' in deps || '@ai-sdk/openai' in deps || '@ai-sdk/anthropic' in deps) {
+        return true;
+      }
+    } catch {
+      // package.json exists but couldn't be read/parsed - continue to file check
+    }
+  }
+
+  // Check for Vercel AI SDK imports in source files
+  const sourceFiles = await fg('**/*.{ts,tsx,js,jsx}', {
+    cwd: options.installDir,
+    ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
+    onlyFiles: true,
+  });
+
+  const aiSdkImportPatterns = [
+    /from\s+['"]ai['"]/,
+    /from\s+['"]ai\/rsc['"]/,
+    /from\s+['"]@ai-sdk\//,
+  ];
+
+  for (const file of sourceFiles) {
+    try {
+      const filePath = path.join(options.installDir, file);
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+
+      if (aiSdkImportPatterns.some(pattern => pattern.test(content))) {
+        return true;
+      }
+    } catch {
+      // Skip files that can't be read
+      continue;
+    }
+  }
+
+  return false;
+}
+
 export const INTEGRATION_CONFIG = {
   [Integration.python]: {
     detect: detectPythonProject,
@@ -104,9 +160,14 @@ export const INTEGRATION_CONFIG = {
     detect: detectTypeScriptProject,
     docsUrl: 'https://www.raindrop.ai/docs/sdk/typescript',
   },
+  [Integration.vercelAiSdk]: {
+    detect: detectVercelAiSdkProject,
+    docsUrl: 'https://www.raindrop.ai/docs/sdk/auto-vercel-ai'
+  }
 } as const satisfies Record<Integration, IntegrationConfig>;
 
 export const INTEGRATION_ORDER = [
   Integration.python,
+  Integration.vercelAiSdk,
   Integration.typescript,
 ] as const;

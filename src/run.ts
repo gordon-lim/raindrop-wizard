@@ -61,6 +61,33 @@ export async function runWizard(argv: Args) {
       case Integration.typescript:
         await runTypescriptWizard(wizardOptions);
         break;
+      case Integration.vercelAiSdk:
+        const trackingChoice = await abortIfCancelled(
+          clack.select({
+            message: 'Which setup would you like?',
+            options: [
+              {
+                value: 'auto',
+                label: 'Auto-Tracking',
+                hint: 'zero-config, less control',
+              },
+              {
+                value: 'manual',
+                label: 'Manual Tracking',
+                hint: 'full control, more code',
+              },
+            ],
+          }),
+        );
+
+        if (trackingChoice === 'auto') {
+          // TODO: Implement runVercelAiSdkWizard
+          clack.log.warn('Auto-tracking wizard not yet implemented');
+          process.exit(1);
+        } else {
+          await runTypescriptWizard(wizardOptions);
+        }
+        break;
       default:
         clack.log.error('No setup wizard selected!');
     }
@@ -113,6 +140,7 @@ async function getIntegrationForSetup(
       options: [
         { value: Integration.python, label: 'Python' },
         { value: Integration.typescript, label: 'TypeScript' },
+        { value: Integration.vercelAiSdk, label: 'Vercel AI SDK' },
       ],
     }),
   );

@@ -150,6 +150,9 @@ async function testIntegration(accessToken: string): Promise<boolean> {
 export async function runAgentWizard(
   config: FrameworkConfig,
   options: WizardOptions,
+  additionalContext?: {
+    otelProvider?: string;
+  },
 ): Promise<void> {
   // Setup phase
   printWelcome({ wizardName: getWelcomeMessage(config.metadata.name) });
@@ -197,6 +200,7 @@ export async function runAgentWizard(
   // Build integration prompt
   const integrationPrompt = await buildIntegrationPrompt(config, {
     frameworkVersion: frameworkVersion || 'latest',
+    otelProvider: additionalContext?.otelProvider || 'standalone',
   });
 
   if (options.debug) {
@@ -265,12 +269,15 @@ async function buildIntegrationPrompt(
   config: FrameworkConfig,
   context: {
     frameworkVersion: string;
+    otelProvider: string;
   },
 ): Promise<string> {
   let documentation = '';
   if (config.prompts.getDocumentation) {
     try {
-      documentation = await config.prompts.getDocumentation();
+      documentation = await config.prompts.getDocumentation({
+        otelProvider: context.otelProvider,
+      });
     } catch (error) {
       logToFile('Error loading documentation:', error);
       // Continue without documentation if loading fails
@@ -281,10 +288,18 @@ async function buildIntegrationPrompt(
     ? `\n\nInstallation documentation:\n${documentation}\n`
     : '';
 
+  const otelProviderInfo =
+    context.otelProvider === 'standalone'
+      ? 'Use raindrop.ai as a standalone solution without any other OTEL providers.'
+      : context.otelProvider === 'sentry'
+        ? 'Integrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry configuration.'
+        : 'Integrate raindrop.ai alongside an existing OTEL provider. Ensure compatibility with the existing OTEL setup.';
+
   return `Integrate raindrop.ai into this ${config.metadata.name} project that makes calls to the OpenAI API.
 
 Project context:
 - Framework: ${config.metadata.name} ${context.frameworkVersion}
+- OTEL Provider: ${otelProviderInfo}
 
 Instructions:
 
