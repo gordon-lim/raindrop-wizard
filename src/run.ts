@@ -6,7 +6,7 @@ import { getIntegrationDescription, Integration } from './lib/constants';
 import { readEnvironment } from './utils/environment';
 import clack from './utils/clack';
 import path from 'path';
-import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config';
+import { INTEGRATION_CONFIG } from './lib/config';
 import { runPythonWizard } from './python/python-wizard';
 import { runTypescriptWizard } from './typescript/typescript-wizard';
 import { EventEmitter } from 'events';
@@ -80,18 +80,28 @@ export async function runWizard(argv: Args) {
 async function detectIntegration(
   options: Pick<WizardOptions, 'installDir'>,
 ): Promise<Integration | undefined> {
-  // Search in priority order defined in INTEGRATION_ORDER
-  const integrationConfigs = Object.entries(INTEGRATION_CONFIG).sort(
-    ([a], [b]) =>
-      INTEGRATION_ORDER.indexOf(a as Integration) -
-      INTEGRATION_ORDER.indexOf(b as Integration),
-  );
+  // Import dynamically to avoid circular dependencies
+  const { detectIntegrationWithAgent } = await import('./lib/agent-interface.js');
 
-  for (const [integration, config] of integrationConfigs) {
-    const detected = await config.detect(options);
-    if (detected) {
-      return integration as Integration;
-    }
+  // Run agent-based detection
+  const result = await detectIntegrationWithAgent(options.installDir, {
+    debug: false,
+    forceInstall: false,
+    installDir: options.installDir,
+    default: false,
+  });
+
+  // Map detection result to Integration type
+  switch (result.integrationType) {
+    case 'python':
+      return Integration.python;
+    case 'vercel-ai-sdk':
+    case 'typescript-direct-llm':
+    case 'javascript-direct-llm':
+      return Integration.typescript;
+    case 'none':
+    default:
+      return undefined;
   }
 }
 

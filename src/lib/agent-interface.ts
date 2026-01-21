@@ -378,6 +378,226 @@ export async function runAgent(
 }
 
 /**
+ * Detection result from agent analysis
+ */
+export type DetectionResult = {
+  integrationType:
+    | 'vercel-ai-sdk'
+    | 'typescript-direct-llm'
+    | 'javascript-direct-llm'
+    | 'python'
+    | 'none';
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+  files?: string[];
+};
+
+/**
+ * Run agent to detect what type of AI integration exists in the project
+ */
+export async function detectIntegrationWithAgent(
+  workingDirectory: string,
+  options: WizardOptions,
+): Promise<DetectionResult> {
+  logToFile('Starting agent-based integration detection');
+
+  const detectionPrompt = `Analyze this project to determine what type of AI/LLM integration it uses.
+
+Your task is to examine the project files and identify:
+
+1. **Vercel AI SDK** - Look for:
+   - Imports from 'ai' or '@ai-sdk/*' packages
+   - Usage of functions like generateText, streamText, generateObject, etc.
+   - package.json dependencies on 'ai' or '@ai-sdk/*'
+
+2. **TypeScript/JavaScript with direct LLM API calls** - Look for:
+   - Direct imports from OpenAI, Anthropic, or other LLM provider SDKs
+   - Direct API calls to LLM endpoints (fetch/axios to api.openai.com, api.anthropic.com, etc.)
+   - NOT using Vercel AI SDK as an abstraction layer
+
+3. **Python** - Look for:
+   - Python files (.py)
+   - Python project files (requirements.txt, pyproject.toml, Pipfile, poetry.lock)
+   - Imports of openai, anthropic, langchain, or other Python LLM libraries
+
+Please respond in this exact JSON format (NO markdown code blocks, just the raw JSON):
+{
+  "integrationType": "vercel-ai-sdk" | "typescript-direct-llm" | "javascript-direct-llm" | "python" | "none",
+  "confidence": "high" | "medium" | "low",
+  "reasoning": "Brief explanation of why you chose this classification",
+  "files": ["list", "of", "relevant", "files"]
+}
+
+Important:
+- Only output the JSON object, nothing else
+- Use "none" if no AI/LLM integration is detected
+- Prioritize Vercel AI SDK if both it and direct API calls are present
+- Focus on where the actual LLM API calls are made, not just config files`;
+
+  const agentConfig = initializeAgent(
+    { workingDirectory },
+    { ...options, debug: false }, // Suppress debug output for detection
+  );
+
+  const collectedText: string[] = [];
+  const spinner = clack.spinner();
+
+  try {
+    const { query } = await getSDKModule();
+    const cliPath = getClaudeCodeExecutablePath();
+
+    logToFile('Starting detection agent run');
+
+    spinner.start('Analyzing project to detect integration type...');
+
+    // Workaround for SDK bug: stdin closes before canUseTool responses can be sent
+    let signalDone: () => void;
+    const resultReceived = new Promise<void>((resolve) => {
+      signalDone = resolve;
+    });
+
+    const createPromptStream = async function* () {
+      yield {
+        type: 'user',
+        session_id: '',
+        message: { role: 'user', content: detectionPrompt },
+        parent_tool_use_id: null,
+      };
+      await resultReceived;
+    };
+
+    const response = query({
+      prompt: createPromptStream(),
+      options: {
+        model: agentConfig.model,
+        cwd: agentConfig.workingDirectory,
+        permissionMode: 'acceptEdits',
+        mcpServers: agentConfig.mcpServers,
+        env: { ...process.env },
+        canUseTool: (toolName: string, input: unknown) => {
+          // For detection, we only need read operations
+          if (toolName === 'Bash') {
+            return Promise.resolve({
+              behavior: 'deny',
+              message: 'Bash commands not allowed during detection',
+            });
+          }
+          return Promise.resolve({
+            behavior: 'allow',
+            updatedInput: input as Record<string, unknown>,
+          });
+        },
+        tools: { type: 'preset', preset: 'claude_code' },
+        stderr: (data: string) => {
+          logToFile('Detection CLI stderr:', data);
+        },
+      },
+    });
+
+    // Process the async generator
+    for await (const message of response) {
+      handleDetectionMessage(message, options, spinner, collectedText);
+      if (message.type === 'result') {
+        signalDone!();
+      }
+    }
+
+    // Parse the agent's response
+    const fullResponse = collectedText.join('\n');
+    logToFile('Detection agent response:', fullResponse);
+
+    // Extract JSON from response (handle potential markdown formatting)
+    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      spinner.stop('Detection failed: Invalid response');
+      throw new Error('Agent did not return valid JSON response');
+    }
+
+    const result: DetectionResult = JSON.parse(jsonMatch[0]);
+    logToFile('Parsed detection result:', result);
+
+    spinner.stop('Detection complete');
+
+    // Log the detection result
+    const typeLabel = {
+      'vercel-ai-sdk': 'Vercel AI SDK',
+      'typescript-direct-llm': 'TypeScript (direct LLM API calls)',
+      'javascript-direct-llm': 'JavaScript (direct LLM API calls)',
+      'python': 'Python',
+      'none': 'No AI integration',
+    }[result.integrationType];
+
+    clack.log.info(`Detected: ${typeLabel}`);
+    if (result.reasoning) {
+      clack.log.step(result.reasoning);
+    }
+    if (result.files && result.files.length > 0) {
+      clack.log.step(`Relevant files: ${result.files.slice(0, 3).join(', ')}${result.files.length > 3 ? ` (+${result.files.length - 3} more)` : ''}`);
+    }
+
+    return result;
+  } catch (error) {
+    spinner.stop('Detection failed');
+    clack.log.warn('Agent detection failed, will prompt for manual selection');
+    logToFile('Detection agent failed:', error);
+    // Fallback to unknown
+    return {
+      integrationType: 'none',
+      confidence: 'low',
+      reasoning: 'Agent detection failed',
+      files: [],
+    };
+  }
+}
+
+/**
+ * Handle SDK messages for detection agent
+ */
+function handleDetectionMessage(
+  message: SDKMessage,
+  options: WizardOptions,
+  spinner: ReturnType<typeof clack.spinner>,
+  collectedText: string[],
+): void {
+  logToFile(`Detection SDK Message: ${message.type}`, JSON.stringify(message, null, 2));
+
+  switch (message.type) {
+    case 'assistant': {
+      // Extract text content from assistant messages
+      const content = message.message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text' && typeof block.text === 'string') {
+            collectedText.push(block.text);
+          }
+        }
+      }
+      break;
+    }
+
+    case 'result': {
+      if (message.subtype === 'success') {
+        logToFile('Detection agent completed successfully');
+        if (typeof message.result === 'string') {
+          collectedText.push(message.result);
+        }
+      } else {
+        logToFile('Detection agent error result:', message.subtype);
+        if (message.errors) {
+          for (const err of message.errors) {
+            logToFile('Detection ERROR:', err);
+          }
+        }
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+/**
  * Handle SDK messages and provide user feedback
  */
 function handleSDKMessage(
