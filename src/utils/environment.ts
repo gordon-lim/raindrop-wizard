@@ -104,3 +104,32 @@ export async function detectEnvVarPrefix(
   // We default to Vite if we can't detect a specific framework, since it's the most commonly used.
   return 'VITE_PUBLIC_';
 }
+
+export async function writeApiKeyToEnv(
+  apiKey: string,
+  installDir: string,
+): Promise<void> {
+  const envPath = path.join(installDir, '.env');
+  let envContent = '';
+
+  try {
+    envContent = await fs.promises.readFile(envPath, 'utf-8');
+  } catch {
+    // File doesn't exist, will create it
+  }
+
+  // Check if RAINDROP_WRITE_KEY already exists in the file
+  if (envContent.includes('RAINDROP_WRITE_KEY=')) {
+    // Replace existing key
+    envContent = envContent.replace(
+      /RAINDROP_WRITE_KEY=.*/,
+      `RAINDROP_WRITE_KEY=${apiKey}`,
+    );
+  } else {
+    // Add new key
+    envContent =
+      envContent.trim() + (envContent ? '\n' : '') + `RAINDROP_WRITE_KEY=${apiKey}\n`;
+  }
+
+  await fs.promises.writeFile(envPath, envContent, 'utf-8');
+}

@@ -6,11 +6,13 @@ import opn from 'opn';
 import { z } from 'zod';
 import clack from './clack';
 import {
+  API_KEY_ENDPOINT,
   ISSUES_URL,
   OAUTH_AUTHORIZE_URL,
   OAUTH_CLIENT_ID,
   OAUTH_CLIENT_SECRET,
   OAUTH_PORT,
+  OAUTH_REDIRECT_URI,
   OAUTH_TOKEN_URL,
   OAUTH_USERINFO_URL,
 } from '../lib/constants';
@@ -20,8 +22,8 @@ const OAUTH_CALLBACK_STYLES = `
   <style>
     * {
       font-family: monospace;
-      background-color: #1b0a00;
-      color: #F7A502;
+      background-color: #E9E9E9;
+      color: #1C3140;
       font-weight: medium;
       font-size: 24px;
       margin: .25rem;
@@ -45,6 +47,7 @@ const OAuthTokenResponseSchema = z.object({
   token_type: z.string(),
   scope: z.string().optional(),
   refresh_token: z.string().optional(),
+  id_token: z.string().optional(),
   scoped_teams: z.array(z.number()).optional(),
   scoped_organizations: z.array(z.string()).optional(),
 });
@@ -77,9 +80,14 @@ function generateCodeChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
+function generateRandomState(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
 async function startCallbackServer(
   authUrl: string,
   signupUrl: string,
+  expectedState: string,
 ): Promise<{
   server: http.Server;
   waitForCallback: () => Promise<string>;
@@ -111,6 +119,7 @@ async function startCallbackServer(
       }
 
       const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
       const error = url.searchParams.get('error');
 
       if (error) {
@@ -141,6 +150,25 @@ async function startCallbackServer(
       }
 
       if (code) {
+        if (state !== expectedState) {
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(`
+            <html>
+              <head>
+                <meta charset="UTF-8">
+                <title>Raindrop wizard - Invalid state</title>
+                ${OAUTH_CALLBACK_STYLES}
+              </head>
+              <body>
+                <p>Invalid state parameter received. This could be a CSRF attack.</p>
+                <p>You can close this window.</p>
+              </body>
+            </html>
+          `);
+          callbackReject(new Error('Invalid state parameter'));
+          return;
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`
           <html>
@@ -188,13 +216,13 @@ async function exchangeCodeForToken(
   codeVerifier: string,
 ): Promise<OAuthTokenResponse> {
   const params = new URLSearchParams();
-  params.append('grant_type', 'authorization_code');
-  params.append('code', code);
-  params.append('redirect_uri', `http://localhost:${OAUTH_PORT}/callback`);
   params.append('client_id', OAUTH_CLIENT_ID);
+  params.append('code', code);
+  params.append('redirect_uri', OAUTH_REDIRECT_URI);
+  params.append('grant_type', 'authorization_code');
   params.append('code_verifier', codeVerifier);
 
-  const response = await axios.post(OAUTH_TOKEN_URL, params.toString(), {
+  const response = await axios.post(OAUTH_TOKEN_URL, params, {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
@@ -213,19 +241,28 @@ export async function getUserInfo(accessToken: string): Promise<OAuthUserInfo> {
   return OAuthUserInfoSchema.parse(response.data);
 }
 
+export async function getUserApiKey(accessToken: string): Promise<string> {
+  const response = await axios.get(API_KEY_ENDPOINT, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return response.data.api_key;
+}
+
 export async function performOAuthFlow(
   config: OAuthConfig,
 ): Promise<OAuthTokenResponse> {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
+  const state = generateRandomState();
 
   const authUrl = new URL(OAUTH_AUTHORIZE_URL);
   authUrl.searchParams.set('client_id', OAUTH_CLIENT_ID);
-  authUrl.searchParams.set(
-    'redirect_uri',
-    `http://localhost:${OAUTH_PORT}/callback`,
-  );
+  authUrl.searchParams.set('redirect_uri', OAUTH_REDIRECT_URI);
   authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
   authUrl.searchParams.set('scope', config.scopes.join(' '));
@@ -242,6 +279,7 @@ export async function performOAuthFlow(
   const { server, waitForCallback } = await startCallbackServer(
     authUrl.toString(),
     signupUrl.toString(),
+    state,
   );
 
   clack.log.info(
@@ -271,6 +309,8 @@ export async function performOAuthFlow(
         setTimeout(() => reject(new Error('Authorization timed out')), 60_000),
       ),
     ]);
+
+
 
     const token = await exchangeCodeForToken(code, codeVerifier);
 

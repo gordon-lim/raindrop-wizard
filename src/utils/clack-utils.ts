@@ -1,5 +1,7 @@
 import * as childProcess from 'node:child_process';
+import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
+import * as path from 'node:path';
 
 import chalk from 'chalk';
 import { traceStep } from '../telemetry';
@@ -7,6 +9,7 @@ import type { WizardOptions } from './types';
 import type { Integration } from '../lib/constants';
 import clack from './clack';
 import { INTEGRATION_CONFIG } from '../lib/config';
+import type { OAuthTokenResponse, OAuthUserInfo } from './oauth';
 import { getUserInfo, performOAuthFlow } from './oauth';
 
 export function abort(message?: string, status?: number): never {
@@ -158,7 +161,7 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
 
 export async function askForWizardLogin(options: {
   signup: boolean;
-}): Promise<object> {
+}): Promise<OAuthTokenResponse> {
   const tokenResponse = await performOAuthFlow({
     scopes: [
       'user:read',
@@ -188,5 +191,5 @@ export async function askForWizardLogin(options: {
     `Login complete. ${options.signup ? 'Welcome to Raindrop! 🎉' : ''}`,
   );
 
-  return {};
+  return tokenResponse;
 }
