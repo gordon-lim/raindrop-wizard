@@ -289,17 +289,17 @@ async function buildIntegrationPrompt(
     : '';
 
   const otelProviderInfo =
-    context.otelProvider === 'standalone'
-      ? 'Use raindrop.ai as a standalone solution without any other OTEL providers.'
-      : context.otelProvider === 'sentry'
-        ? 'Integrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry configuration.'
-        : 'Integrate raindrop.ai alongside an existing OTEL provider. Ensure compatibility with the existing OTEL setup.';
+    context.otelProvider === 'sentry'
+      ? `- OTEL Provider: 'sentry'\nIntegrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry configuration.`
+      : context.otelProvider === 'other'
+        ? `- OTEL Provider: 'other'\nIntegrate raindrop.ai alongside an existing OTEL provider other than Sentry. Ensure compatibility with the existing OTEL setup.`
+        : '';
 
   return `Integrate raindrop.ai into this ${config.metadata.name} project that makes calls to the OpenAI API.
 
 Project context:
 - Framework: ${config.metadata.name} ${context.frameworkVersion}
-- OTEL Provider: ${otelProviderInfo}
+${otelProviderInfo}
 
 Instructions:
 
