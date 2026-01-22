@@ -100,14 +100,11 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
             const startPos = match.index;
             const openBracePos = content.indexOf('{', startPos);
 
-            // Find matching closing brace and paren by counting depth
+            // Find matching closing brace by counting depth
             let braceDepth = 0;
-            let parenDepth = 0;
             let endBracePos = -1;
-            let endParenPos = -1;
             let inString = false;
             let stringChar = '';
-            let inRegex = false;
 
             for (let i = openBracePos; i < content.length; i++) {
               const char = content[i];
@@ -124,36 +121,38 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
                 }
               }
 
-              // Track regex literals (simplified - may not catch all cases)
-              if (char === '/' && prevChar !== '\\' && !inString) {
-                // Basic check: if preceded by =, (, [, {, or newline, might be regex
-                const beforePrev = i > 1 ? content[i - 2] : '';
-                if ('=([{'.includes(prevChar) || /\s/.test(prevChar)) {
-                  inRegex = !inRegex;
+              // Count braces when not in string
+              if (!inString) {
+                if (char === '{') {
+                  braceDepth++;
                 }
-              }
-
-              // Count braces and parens when not in string or regex
-              if (!inString && !inRegex) {
-                if (char === '{') braceDepth++;
                 if (char === '}') {
                   braceDepth--;
-                  if (braceDepth === 0 && endBracePos === -1) {
+                  if (braceDepth === 0) {
                     endBracePos = i;
-                  }
-                }
-                if (char === '(') parenDepth++;
-                if (char === ')') {
-                  parenDepth--;
-                  if (endBracePos !== -1 && parenDepth === 0) {
-                    endParenPos = i;
                     break;
                   }
                 }
               }
             }
 
-            if (endBracePos !== -1 && endParenPos !== -1 && endParenPos === endBracePos + 1) {
+            // After finding closing brace, verify next non-whitespace char is ')'
+            let endParenPos = -1;
+            if (endBracePos !== -1) {
+              for (let i = endBracePos + 1; i < content.length; i++) {
+                const char = content[i];
+                if (char === ')') {
+                  endParenPos = i;
+                  break;
+                }
+                // If we hit a non-whitespace character that's not ')', this isn't the pattern we want
+                if (!/\s/.test(char)) {
+                  break;
+                }
+              }
+            }
+
+            if (endBracePos !== -1 && endParenPos !== -1) {
               // Extract inner content (between braces)
               const innerContent = content.slice(openBracePos + 1, endBracePos);
 

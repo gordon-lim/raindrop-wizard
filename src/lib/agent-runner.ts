@@ -23,6 +23,7 @@ import { getUserApiKey } from '../utils/oauth';
 import axios from 'axios';
 import { API_BASE_URL, TEST_PORT, TEST_URL } from './constants';
 import http from 'http';
+import { parseOtelTraces, spanToSimpleFormat, extractAIAttributes } from './otel-parser';
 
 /**
  * Create an HTTP server to receive test events
@@ -39,43 +40,129 @@ function createTestServer(): {
 
   const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
-      let body = '';
+      const contentType = req.headers['content-type'] || '';
+      const isJson = contentType.includes('application/json');
+
+      const chunks: Buffer[] = [];
 
       req.on('data', (chunk) => {
-        body += chunk.toString();
+        chunks.push(Buffer.from(chunk));
       });
 
       req.on('end', () => {
         try {
-          const event = JSON.parse(body);
-          eventsReceived.push(event);
+          const buffer = Buffer.concat(chunks);
 
-          // Log the request to clack
+          let event: any;
+          let bodyForLogging: string;
+
+          if (isJson) {
+            // JSON content-type = legacy raindrop.ai event format
+            const body = buffer.toString('utf-8');
+            const parsedJson = JSON.parse(body);
+
+            bodyForLogging = body;
+            event = parsedJson;
+
+            clack.log.info(
+              chalk.cyan('Parsed as raindrop.ai JSON event')
+            );
+          } else {
+            // Binary protobuf = OTEL format
+            try {
+              const { spans, format } = parseOtelTraces(new Uint8Array(buffer), contentType);
+              bodyForLogging = `[OTEL ${format} data with ${spans.length} span(s), ${buffer.length} bytes]`;
+
+              // Convert OTEL spans to event format
+              event = {
+                format: 'otel',
+                spans: spans.map(spanToSimpleFormat),
+                aiAttributes: extractAIAttributes(spans),
+              };
+
+              clack.log.info(
+                chalk.cyan('Parsed as OTEL protobuf')
+              );
+            } catch (protobufError) {
+              // If protobuf parsing fails, store raw buffer
+              bodyForLogging = `[Binary data, ${buffer.length} bytes - failed to parse as OTEL protobuf]`;
+              event = { rawBuffer: buffer, error: protobufError instanceof Error ? protobufError.message : String(protobufError) };
+
+              clack.log.warn(
+                chalk.yellow('Failed to parse as OTEL protobuf:') +
+                '\n' +
+                chalk.dim(protobufError instanceof Error ? protobufError.message : String(protobufError))
+              );
+            }
+          }
+
           clack.log.info(
-            chalk.cyan('Request received:') +
+            chalk.cyan('HTTP request received:') +
             '\n' +
             chalk.dim(`Method: ${req.method}`) +
             '\n' +
             chalk.dim(`URL: ${req.url}`) +
             '\n' +
+            chalk.dim(`Content-Type: ${contentType}`) +
+            '\n' +
             chalk.dim(`Headers: ${JSON.stringify(req.headers, null, 2)}`) +
             '\n' +
-            chalk.dim(`Body: ${JSON.stringify(event, null, 2)}`),
+            chalk.dim(`Raw body: ${bodyForLogging}`)
           );
 
-          // Check if this is the completion event (is_pending === false)
-          if (event.is_pending === false || event.is_pending === 'false') {
-            completedEvent = event;
+          // Handle completion based on event type:
+          // - JSON events: Add to list, complete when is_pending === false
+          // - OTEL protobuf: Only add if has spans, complete immediately
+          const isOtelTrace = event.format === 'otel';
+          const isJsonEvent = !isOtelTrace;
 
-            // Resolve the promise if someone is waiting
-            if (eventResolver) {
-              eventResolver(eventsReceived);
-              eventResolver = null;
+          if (isJsonEvent) {
+            // JSON event format: always add to list
+            eventsReceived.push(event);
+
+            // Check if this is the completion event
+            const isComplete = event.is_pending === false || event.is_pending === 'false';
+
+            if (isComplete) {
+              completedEvent = event;
+              clack.log.success(
+                chalk.green(`Completion event received (is_pending=false). Test complete!`)
+              );
+
+              // Resolve the promise if someone is waiting
+              if (eventResolver) {
+                eventResolver(eventsReceived);
+                eventResolver = null;
+              }
+            } else {
+              clack.log.info(
+                chalk.yellow(`Event received with is_pending=${event.is_pending}. Waiting for completion event...`)
+              );
             }
           } else {
-            clack.log.info(
-              chalk.yellow(`Event received with is_pending=${event.is_pending}. Waiting for completion event...`)
-            );
+            // OTEL protobuf format
+            const hasSpans = event.spans && event.spans.length > 0;
+
+            if (hasSpans) {
+              // Has spans: add to list and complete immediately
+              eventsReceived.push(event);
+              completedEvent = event;
+
+              clack.log.success(
+                chalk.green(`OTEL trace received with ${event.spans.length} span(s). Test complete!`)
+              );
+
+              // Resolve the promise if someone is waiting
+              if (eventResolver) {
+                eventResolver(eventsReceived);
+                eventResolver = null;
+              }
+            } else {
+              // Empty OTEL trace: ignore and continue listening
+              clack.log.info(
+                chalk.dim(`OTEL trace with 0 spans received - ignoring and continuing to listen...`)
+              );
+            }
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -84,12 +171,10 @@ function createTestServer(): {
           clack.log.error(
             chalk.red('Failed to parse request:') +
             '\n' +
-            chalk.dim(`Error: ${error instanceof Error ? error.message : String(error)}`) +
-            '\n' +
-            chalk.dim(`Body: ${body}`),
+            chalk.dim(`Error: ${error instanceof Error ? error.message : String(error)}`),
           );
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          res.end(JSON.stringify({ error: 'Failed to parse request body' }));
         }
       });
     } else {
@@ -164,9 +249,9 @@ async function testIntegration(
     clack.log.step(
       chalk.cyan('\nTest your integration:') +
       '\n' +
-      chalk.dim(`Send an event through your app.`) +
+      chalk.dim(`Interact with your AI.`) +
       '\n' +
-      chalk.dim('Waiting for completion event (is_pending=false)...') +
+      chalk.dim('Listening for interactions on the test server...') +
       '\n' +
       chalk.dim('Press any key to continue without waiting...'),
     );
@@ -294,37 +379,43 @@ export async function runAgentWizard(
     options,
   );
 
-  const sessionId = await runAgent(agent, integrationPrompt, options, spinner, {
-    estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
-    spinnerMessage: SPINNER_MESSAGE,
-    successMessage: config.ui.successMessage,
-    errorMessage: 'Integration failed',
-  });
+  // const sessionId = await runAgent(agent, integrationPrompt, options, spinner, {
+  //   estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
+  //   spinnerMessage: SPINNER_MESSAGE,
+  //   successMessage: config.ui.successMessage,
+  //   errorMessage: 'Integration failed',
+  // });
 
-  // Run setup function if provided (e.g., add test endpoint)
-  if (config.setup) {
-    spinner.start('Configuring test environment...');
-    try {
-      await config.setup();
-      spinner.stop('Test environment configured');
-    } catch (error) {
-      spinner.stop('Setup encountered issues (non-fatal)');
-      logToFile('Setup error:', error);
+
+  const sessionId = '123';
+  // Use try-finally to ensure cleanup always runs, even if setup or test fails
+  try {
+    // Run setup function if provided (e.g., add test endpoint)
+    if (config.setup) {
+      spinner.start('Configuring test environment...');
+      try {
+        await config.setup();
+        spinner.stop('Test environment configured');
+      } catch (error) {
+        spinner.stop('Setup encountered issues (non-fatal)');
+        logToFile('Setup error:', error);
+        throw error; // Re-throw to trigger cleanup
+      }
     }
-  }
 
-  // Test the integration with agent feedback loop
-  await testIntegration(agent, sessionId, config, options, spinner);
-
-  // Run cleanup function if provided
-  if (config.cleanup) {
-    spinner.start('Cleaning up test configuration...');
-    try {
-      await config.cleanup();
-      spinner.stop('Test configuration cleaned up');
-    } catch (error) {
-      spinner.stop('Cleanup encountered issues (non-fatal)');
-      logToFile('Cleanup error:', error);
+    // Test the integration with agent feedback loop
+    await testIntegration(agent, sessionId, config, options, spinner);
+  } finally {
+    // Run cleanup function if provided - this ALWAYS runs
+    if (config.cleanup) {
+      spinner.start('Cleaning up test configuration...');
+      try {
+        await config.cleanup();
+        spinner.stop('Test configuration cleaned up');
+      } catch (error) {
+        spinner.stop('Cleanup encountered issues (non-fatal)');
+        logToFile('Cleanup error:', error);
+      }
     }
   }
 
@@ -429,64 +520,16 @@ function buildFeedbackPrompt(eventData: any, testUrl: string): string {
     // Check if eventData is an array (multiple events) or a single event
     const events = Array.isArray(eventData) ? eventData : [eventData];
 
-    // Verify required fields
-    const requiredFields = ['input', 'output', 'model', 'convo_id', 'event_id', 'user_id'];
-    const missingFields: string[] = [];
-    const fieldIssues: string[] = [];
+    // Detect format: OTEL protobuf (spans) vs JSON events
+    const isOtelFormat = events.some((event) => event.format === 'otel');
 
-    // Check each event for required fields
-    events.forEach((event, index) => {
-      requiredFields.forEach((field) => {
-        if (!(field in event) || event[field] === null || event[field] === undefined) {
-          const issue = `Event ${index + 1}: Missing or null field '${field}'`;
-          if (!missingFields.includes(issue)) {
-            missingFields.push(issue);
-          }
-        }
-      });
-    });
-
-    // Check for completion indicator (is_pending=False)
-    const hasCompletionEvent = events.some(
-      (event) => event.is_pending === false || event.is_pending === 'false'
-    );
-
-    if (!hasCompletionEvent && events.length > 0) {
-      fieldIssues.push(
-        `Found ${events.length} event(s) but no event with is_pending=False. This suggests the request likely didn't properly call interaction.finish().`
-      );
+    if (isOtelFormat) {
+      // Handle OTLP protobuf trace verification (spans)
+      return buildOtelTraceFeedbackPrompt(events, testUrl);
+    } else {
+      // Handle JSON raindrop.ai event verification
+      return buildJsonEventFeedbackPrompt(events, testUrl);
     }
-
-    // Build verification message
-    let verificationMessage = `Integration test result: Event(s) were successfully received at ${testUrl}.
-
-Event data received:
-${JSON.stringify(eventData, null, 2)}
-
-Please verify:`;
-
-    if (missingFields.length > 0) {
-      verificationMessage += `\n\n❌ Missing required fields:\n${missingFields.map(f => `  - ${f}`).join('\n')}`;
-    }
-
-    if (fieldIssues.length > 0) {
-      verificationMessage += `\n\n⚠️  Issues detected:\n${fieldIssues.map(f => `  - ${f}`).join('\n')}`;
-    }
-
-    verificationMessage += `\n\nRequired fields to verify:
-1. input - Should contain the input/prompt sent to the model
-2. output - Should contain the model's response
-3. model - Should specify which model was used
-4. convo_id - Should be a unique conversation identifier
-5. event_id - Should be a unique event identifier
-6. user_id - Should identify the user making the request
-7. is_pending - Should be False for completed interactions (indicates interaction.finish() was called)
-
-${missingFields.length > 0 || fieldIssues.length > 0
-        ? 'Please fix the integration code to ensure all required fields are present and interaction.finish() is properly called.'
-        : 'If everything looks correct, respond with a brief confirmation.'}`;
-
-    return verificationMessage;
   } else {
     clack.log.warn(
       chalk.yellow('\nNo event received at the test server.') +
@@ -505,4 +548,147 @@ This suggests the integration is not working correctly. Please troubleshoot:
 
 Fix any issues found and explain what was wrong.`;
   }
+}
+
+/**
+ * Build feedback prompt for OTLP protobuf traces (spans)
+ */
+function buildOtelTraceFeedbackPrompt(events: any[], testUrl: string): string {
+  const issues: string[] = [];
+  const warnings: string[] = [];
+
+  // Analyze OTEL traces
+  let totalSpans = 0;
+  let aiSpans = 0;
+
+  events.forEach((event) => {
+    if (event.format === 'otel' && event.spans) {
+      totalSpans += event.spans.length;
+
+      // Check AI attributes
+      event.aiAttributes?.forEach((aiAttr: any) => {
+        if (aiAttr.model || aiAttr.genAiSystem || aiAttr.prompt) {
+          aiSpans++;
+        }
+      });
+    }
+  });
+
+  // Validation checks
+  if (totalSpans === 0) {
+    issues.push('No spans were found in the OTEL trace data');
+  }
+
+  if (aiSpans === 0 && totalSpans > 0) {
+    warnings.push(`Found ${totalSpans} span(s) but none contain AI/LLM attributes (gen_ai.system, gen_ai.response.model, etc.). Make sure OpenAI API calls are being traced.`);
+  }
+
+  // Build verification message
+  let verificationMessage = `Integration test result: OpenTelemetry trace data successfully received at ${testUrl}.
+
+Trace summary:
+- Total spans received: ${totalSpans}
+- Spans with AI/LLM attributes: ${aiSpans}
+- Format: OTLP (OpenTelemetry Protocol)
+
+`;
+
+  if (issues.length > 0) {
+    verificationMessage += `\n❌ Issues detected:\n${issues.map(i => `  - ${i}`).join('\n')}\n`;
+  }
+
+  if (warnings.length > 0) {
+    verificationMessage += `\n⚠️  Warnings:\n${warnings.map(w => `  - ${w}`).join('\n')}\n`;
+  }
+
+  if (aiSpans > 0) {
+    verificationMessage += `\n✅ Success! The integration is working correctly.
+
+Key AI/LLM attributes to verify:
+- gen_ai.system: The AI system being used (e.g., "openai", "anthropic")
+- gen_ai.response.model: The model name
+- gen_ai.usage.input_tokens: Input token count
+- gen_ai.usage.output_tokens: Output token count
+
+Please verify that the trace data contains the expected information from your OpenAI API calls.`;
+  } else if (totalSpans > 0) {
+    verificationMessage += `\nPlease verify:
+1. Are the OpenAI API calls being properly instrumented?
+2. Is the OpenTelemetry instrumentation capturing gen_ai.* attributes?
+3. Check the span attributes to ensure AI/LLM data is being recorded.
+
+The integration may need adjustments to properly capture AI/LLM telemetry data.`;
+  } else {
+    verificationMessage += `\nThe integration needs debugging:
+1. Verify that OpenTelemetry is properly initialized
+2. Check that the exporter endpoint is correctly configured to ${testUrl}
+3. Ensure OpenAI API calls are being instrumented
+4. Look for any errors in the application logs`;
+  }
+
+  return verificationMessage;
+}
+
+/**
+ * Build feedback prompt for JSON raindrop.ai events
+ */
+function buildJsonEventFeedbackPrompt(events: any[], testUrl: string): string {
+  // Verify required fields
+  const requiredFields = ['input', 'output', 'model', 'convo_id', 'event_id', 'user_id'];
+  const missingFields: string[] = [];
+  const fieldIssues: string[] = [];
+
+  // Check each event for required fields
+  events.forEach((event, index) => {
+    requiredFields.forEach((field) => {
+      if (!(field in event) || event[field] === null || event[field] === undefined) {
+        const issue = `Event ${index + 1}: Missing or null field '${field}'`;
+        if (!missingFields.includes(issue)) {
+          missingFields.push(issue);
+        }
+      }
+    });
+  });
+
+  // Check for completion indicator (is_pending=False)
+  const hasCompletionEvent = events.some(
+    (event) => event.is_pending === false || event.is_pending === 'false'
+  );
+
+  if (!hasCompletionEvent && events.length > 0) {
+    fieldIssues.push(
+      `Found ${events.length} event(s) but no event with is_pending=False. This suggests the request likely didn't properly call interaction.finish().`
+    );
+  }
+
+  // Build verification message
+  let verificationMessage = `Integration test result: Event(s) were successfully received at ${testUrl}.
+
+Event data received:
+${JSON.stringify(events, null, 2)}
+
+Please verify:`;
+
+  if (missingFields.length > 0) {
+    verificationMessage += `\n\n❌ Missing required fields:\n${missingFields.map(f => `  - ${f}`).join('\n')}`;
+  }
+
+  if (fieldIssues.length > 0) {
+    verificationMessage += `\n\n⚠️  Issues detected:\n${fieldIssues.map(f => `  - ${f}`).join('\n')}`;
+  }
+
+  verificationMessage += `\n\nRequired fields to verify:
+1. input - Should contain the input/prompt sent to the model
+2. output - Should contain the model's response
+3. model - Should specify which model was used
+4. convo_id - Should be a unique conversation identifier
+5. event_id - Should be a unique event identifier
+6. user_id - Should identify the user making the request
+7. is_pending - Should be False for completed interactions (indicates interaction.finish() was called)
+
+${missingFields.length > 0 || fieldIssues.length > 0
+      ? 'Please fix the integration code to ensure all required fields are present and interaction.finish() is properly called.'
+      : 'If everything looks correct, respond with a brief confirmation.'}`;
+
+  return verificationMessage;
 }
