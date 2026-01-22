@@ -9,6 +9,7 @@ import path from 'path';
 import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config';
 import { runPythonWizard } from './python/python-wizard';
 import { runTypescriptWizard } from './typescript/typescript-wizard';
+import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard';
 import { EventEmitter } from 'events';
 import chalk from 'chalk';
 
@@ -68,22 +69,20 @@ export async function runWizard(argv: Args) {
             options: [
               {
                 value: 'auto',
-                label: 'Auto-Tracking',
-                hint: 'zero-config, less control',
+                label: 'Vercel AI SDK\' OTel integration',
+                hint: 'no attachments, no custom properties',
               },
               {
                 value: 'manual',
-                label: 'Manual Tracking',
-                hint: 'full control, more code',
+                label: 'raindrop.ai Typescript SDK',
+                hint: 'attachments, custom properties',
               },
             ],
           }),
         );
 
         if (trackingChoice === 'auto') {
-          // TODO: Implement runVercelAiSdkWizard
-          clack.log.warn('Auto-tracking wizard not yet implemented');
-          process.exit(1);
+          await runVercelAiSdkWizard(wizardOptions);
         } else {
           await runTypescriptWizard(wizardOptions);
         }
@@ -100,6 +99,7 @@ export async function runWizard(argv: Args) {
         docsUrl,
       )} to set up raindrop.ai manually.`,
     );
+    clack.log.error("error: " + error);
     process.exit(1);
   }
 }

@@ -26,8 +26,8 @@ Initialize raindrop.ai in your application:
 import { Raindrop } from "raindrop-ai";
 
 // Replace with the key from your Raindrop dashboard
-const raindrop = new Raindrop({ 
-  writeKey: process.env.RAINDROP_WRITE_KEY || "YOUR_WRITE_KEY" 
+const raindrop = new Raindrop({
+  writeKey: process.env.RAINDROP_WRITE_KEY || "YOUR_WRITE_KEY",
 });
 ```
 
@@ -70,7 +70,35 @@ await interaction.withSpan({ name: "generate_response" }, async () => {
   return response;
 });
 
-interaction.finish({ output: "The weather is sunny and 72°F" });
+interaction.finish({ output: response });
+```
+
+Make sure you properly deal with streaming:
+
+```typescript
+// Wrap the OpenAI call with Raindrop tracing
+const result = await interaction.withSpan(
+  {
+    name: 'generate_response',
+    properties: { model: 'gpt-4o-mini' },
+    inputParameters: [userInput],
+  },
+  async () => {
+    return await streamText({
+      model: openai('gpt-4o-mini'),
+      messages,
+    });
+  }
+);
+
+// Collect full text from stream and finish interaction asynchronously
+(async () => {
+  let fullText = '';
+  for await (const delta of result.textStream) {
+    fullText += delta;
+  }
+  interaction.finish({ output: fullText });
+})();
 ```
 
 ### Next.js Configuration

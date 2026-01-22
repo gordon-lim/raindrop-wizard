@@ -103,6 +103,8 @@ async function startCallbackServer(
       });
 
     const server = http.createServer((req, res) => {
+      // Disable keep-alive to ensure connections close after each response
+      res.setHeader('Connection', 'close');
       if (!req.url) {
         res.writeHead(400);
         res.end();
@@ -140,8 +142,7 @@ async function startCallbackServer(
             ? 'Authorization cancelled.'
             : `Authorization failed.`
           }</p>
-              <p>Return to your terminal. This window will close automatically.</p>
-              <script>window.close();</script>
+              <p>Return to your terminal.</p>
             </body>
           </html>
         `);
@@ -180,27 +181,16 @@ async function startCallbackServer(
             <body>
               <p>Raindrop login complete!</p>
               <p>Return to your terminal: the wizard is hard at work on your project<span class="blink">█</span></p>
-              <script>window.close();</script>
             </body>
           </html>
         `);
         callbackResolve(code);
-      } else {
-        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`
-          <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>Raindrop wizard - Invalid request</title>
-              ${OAUTH_CALLBACK_STYLES}
-            </head>
-            <body>
-              <p>Invalid request - no authorization code received.</p>
-              <p>You can close this window.</p>
-            </body>
-          </html>
-        `);
+        return;
       }
+
+      // Handle any other requests (like favicon.ico) so connections close properly
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
     });
 
     server.listen(OAUTH_PORT, () => {
@@ -310,17 +300,21 @@ export async function performOAuthFlow(
       ),
     ]);
 
-
-
     const token = await exchangeCodeForToken(code, codeVerifier);
 
-    server.close();
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+
     loginSpinner.stop('Authorization complete!');
 
     return token;
   } catch (e) {
     loginSpinner.stop('Authorization failed.');
-    server.close();
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
 
     const error = e instanceof Error ? e : new Error('Unknown error');
 

@@ -9,6 +9,10 @@ export interface FrameworkConfig {
   detection: FrameworkDetection;
   prompts: PromptConfig;
   ui: UIConfig;
+  /** Optional setup function to run before testing (e.g., add test endpoint) */
+  setup?: () => Promise<void>;
+  /** Optional cleanup function to run after agent completes (e.g., remove test endpoint) */
+  cleanup?: () => Promise<void>;
 }
 
 /**
@@ -39,10 +43,11 @@ export interface FrameworkDetection {
 export interface PromptConfig {
   /**
    * Optional: Get documentation content to include in the prompt
-   * @param context Optional context for parameterized documentation (e.g., otelProvider)
+   * @param context Optional context for parameterized documentation (e.g., otelProvider, otelPlatform)
    */
   getDocumentation?: (context?: {
     otelProvider?: string;
+    otelPlatform?: string;
   }) => Promise<string>;
 }
 

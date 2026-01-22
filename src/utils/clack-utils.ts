@@ -193,3 +193,34 @@ export async function askForWizardLogin(options: {
 
   return tokenResponse;
 }
+
+/**
+ * Wait for user to press any key
+ */
+export async function waitForUserKeyPress(): Promise<void> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+
+    // Check if stdin is a TTY and can be set to raw mode
+    if (!stdin.isTTY) {
+      // If not a TTY, just resolve immediately (shouldn't happen in normal usage)
+      resolve();
+      return;
+    }
+
+    const wasRaw = stdin.isRaw;
+
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    const onData = () => {
+      stdin.setRawMode(wasRaw);
+      stdin.pause();
+      stdin.removeListener('data', onData);
+      resolve();
+    };
+
+    stdin.once('data', onData);
+  });
+}

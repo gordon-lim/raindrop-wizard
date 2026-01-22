@@ -2,12 +2,13 @@ import type { WizardOptions } from '../utils/types';
 import type { FrameworkConfig } from '../lib/framework-config';
 import { enableDebugLogs } from '../utils/debug';
 import { runAgentWizard } from '../lib/agent-runner';
-import { Integration } from '../lib/constants';
+import { Integration, TEST_URL } from '../lib/constants';
 import { getPackageVersion } from '../utils/package-json';
 import fs from 'fs';
 import path from 'path';
 import clack from '../utils/clack';
 import { abort } from '../utils/clack-utils';
+import { glob } from 'glob';
 
 /**
  * TypeScript framework configuration for the universal agent runner.
@@ -33,7 +34,10 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
           __dirname,
           `../../../src/typescript/docs.md`,
         );
-        const baseDocs = await fs.promises.readFile(baseDocsPath, 'utf-8');
+        let baseDocs = await fs.promises.readFile(baseDocsPath, 'utf-8');
+
+        // Template replacement
+        baseDocs = baseDocs.replace(/\{\{TEST_URL\}\}/g, TEST_URL);
 
         // If no otel provider, just return base docs
         if (!otelProvider) {
@@ -45,7 +49,10 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
           __dirname,
           `../../../src/typescript/otel-${otelProvider}.md`,
         );
-        const otelDocs = await fs.promises.readFile(otelDocsPath, 'utf-8');
+        let otelDocs = await fs.promises.readFile(otelDocsPath, 'utf-8');
+
+        // Template replacement for otel docs
+        otelDocs = otelDocs.replace(/\{\{TEST_URL\}\}/g, TEST_URL);
 
         return `${baseDocs}\n\n${otelDocs}`;
       } catch (error) {
@@ -69,6 +76,153 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
       'Configure your API key in environment variables',
       'Start using raindrop.ai in your TypeScript application',
     ],
+  },
+
+  setup: async () => {
+    // Add test endpoint to Raindrop initialization for testing
+    const files = await glob('**/*.{ts,tsx,js,jsx}', {
+      ignore: ['node_modules/**', 'dist/**', '.next/**', 'build/**'],
+      absolute: true,
+    });
+
+    for (const file of files) {
+      try {
+        let content = await fs.promises.readFile(file, 'utf-8');
+
+        // Check if file contains new Raindrop({ without endpoint already
+        if (content.includes('new Raindrop({') && !content.includes('endpoint:')) {
+          // Find and replace Raindrop initialization with proper brace matching
+          const pattern = /new\s+Raindrop\s*\(\s*\{/g;
+          let match;
+          const replacements: Array<{ start: number; end: number; replacement: string }> = [];
+
+          while ((match = pattern.exec(content)) !== null) {
+            const startPos = match.index;
+            const openBracePos = content.indexOf('{', startPos);
+
+            // Find matching closing brace and paren by counting depth
+            let braceDepth = 0;
+            let parenDepth = 0;
+            let endBracePos = -1;
+            let endParenPos = -1;
+            let inString = false;
+            let stringChar = '';
+            let inRegex = false;
+
+            for (let i = openBracePos; i < content.length; i++) {
+              const char = content[i];
+              const prevChar = i > 0 ? content[i - 1] : '';
+
+              // Track string state (single, double, or template literal)
+              if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+                if (!inString) {
+                  inString = true;
+                  stringChar = char;
+                } else if (char === stringChar) {
+                  inString = false;
+                  stringChar = '';
+                }
+              }
+
+              // Track regex literals (simplified - may not catch all cases)
+              if (char === '/' && prevChar !== '\\' && !inString) {
+                // Basic check: if preceded by =, (, [, {, or newline, might be regex
+                const beforePrev = i > 1 ? content[i - 2] : '';
+                if ('=([{'.includes(prevChar) || /\s/.test(prevChar)) {
+                  inRegex = !inRegex;
+                }
+              }
+
+              // Count braces and parens when not in string or regex
+              if (!inString && !inRegex) {
+                if (char === '{') braceDepth++;
+                if (char === '}') {
+                  braceDepth--;
+                  if (braceDepth === 0 && endBracePos === -1) {
+                    endBracePos = i;
+                  }
+                }
+                if (char === '(') parenDepth++;
+                if (char === ')') {
+                  parenDepth--;
+                  if (endBracePos !== -1 && parenDepth === 0) {
+                    endParenPos = i;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (endBracePos !== -1 && endParenPos !== -1 && endParenPos === endBracePos + 1) {
+              // Extract inner content (between braces)
+              const innerContent = content.slice(openBracePos + 1, endBracePos);
+
+              // Check if we need a comma
+              const trimmed = innerContent.trim();
+              const needsComma = trimmed.length > 0 && !trimmed.endsWith(',');
+              const comma = needsComma ? ',' : '';
+
+              // Build replacement
+              const replacement = `new Raindrop({${innerContent}${comma}\n  endpoint: "${TEST_URL}"\n})`;
+
+              replacements.push({
+                start: startPos,
+                end: endParenPos + 1,
+                replacement,
+              });
+            }
+          }
+
+          // Apply replacements in reverse order to maintain positions
+          if (replacements.length > 0) {
+            replacements.reverse();
+            for (const { start, end, replacement } of replacements) {
+              content = content.slice(0, start) + replacement + content.slice(end);
+            }
+            await fs.promises.writeFile(file, content, 'utf-8');
+          }
+        }
+      } catch (error) {
+        // Skip files that can't be read/written
+        continue;
+      }
+    }
+  },
+
+  cleanup: async () => {
+    // Remove test endpoint from Raindrop initialization
+    const files = await glob('**/*.{ts,tsx,js,jsx}', {
+      ignore: ['node_modules/**', 'dist/**', '.next/**', 'build/**'],
+      absolute: true,
+    });
+
+    for (const file of files) {
+      try {
+        let content = await fs.promises.readFile(file, 'utf-8');
+
+        // Check if file contains new Raindrop({ with endpoint
+        if (content.includes('new Raindrop({') && content.includes('endpoint:')) {
+          // Remove endpoint property - handle both single and double quotes with escaped quotes
+          // Also handle template literals
+          content = content.replace(
+            /,?\s*endpoint:\s*(?:(["'`])(?:(?!\1).|\\.)*?\1|[^,}\s]+)\s*,?/g,
+            ''
+          );
+
+          // Clean up any double commas or trailing commas before closing brace
+          content = content.replace(/,\s*,/g, ',');
+          content = content.replace(/,(\s*)\}/g, '$1}');
+
+          // Clean up leading commas after opening brace
+          content = content.replace(/\{\s*,/g, '{');
+
+          await fs.promises.writeFile(file, content, 'utf-8');
+        }
+      } catch (error) {
+        // Skip files that can't be read/written
+        continue;
+      }
+    }
   },
 };
 

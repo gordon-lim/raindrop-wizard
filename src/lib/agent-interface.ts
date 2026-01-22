@@ -45,7 +45,7 @@ export type AgentConfig = {
 /**
  * Internal configuration object returned by initializeAgent
  */
-type AgentRunConfig = {
+export type AgentRunConfig = {
   workingDirectory: string;
   mcpServers: McpServersConfig;
   model: string;
@@ -268,7 +268,7 @@ export function initializeAgent(
  * Execute an agent with the provided prompt and options
  * Handles the full lifecycle: spinner, execution, error handling
  *
- * @returns An object containing any error detected in the agent's output
+ * @returns Session ID for resuming this agent session
  */
 export async function runAgent(
   agentConfig: AgentRunConfig,
@@ -280,20 +280,24 @@ export async function runAgent(
     spinnerMessage?: string;
     successMessage?: string;
     errorMessage?: string;
+    resume?: string;
   },
-): Promise<void> {
+): Promise<string | undefined> {
   const {
     estimatedDurationMinutes = 8,
     spinnerMessage = 'Customizing your raindrop.ai setup...',
     successMessage = 'raindrop.ai integration complete',
     errorMessage = 'Integration failed',
+    resume,
   } = config ?? {};
 
   const { query } = await getSDKModule();
 
-  clack.log.step(
-    `This whole process should take about ${estimatedDurationMinutes} minutes including error checking and fixes.\n\nGrab some coffee!`,
-  );
+  if (!resume) {
+    clack.log.step(
+      `This whole process should take about ${estimatedDurationMinutes} minutes including error checking and fixes.\n\nGrab some coffee!`,
+    );
+  }
 
   spinner.start(spinnerMessage);
 
@@ -301,9 +305,13 @@ export async function runAgent(
   logToFile('Starting agent run');
   logToFile('Claude Code executable:', cliPath);
   logToFile('Prompt:', prompt);
+  if (resume) {
+    logToFile('Resuming session:', resume);
+  }
 
   const startTime = Date.now();
   const collectedText: string[] = [];
+  let sessionId: string | undefined;
 
   try {
     // Workaround for SDK bug: stdin closes before canUseTool responses can be sent.
@@ -334,6 +342,7 @@ export async function runAgent(
         permissionMode: 'acceptEdits',
         mcpServers: agentConfig.mcpServers,
         env: { ...process.env },
+        resume,
         canUseTool: (toolName: string, input: unknown) => {
           logToFile('canUseTool called:', { toolName, input });
           const result = wizardCanUseTool(
@@ -356,6 +365,12 @@ export async function runAgent(
 
     // Process the async generator
     for await (const message of response) {
+      // Capture session_id from any message
+      if (message.session_id && !sessionId) {
+        sessionId = message.session_id;
+        logToFile('Captured session_id:', sessionId);
+      }
+
       handleSDKMessage(message, options, spinner, collectedText);
       // Signal completion when result received
       if (message.type === 'result') {
@@ -366,8 +381,10 @@ export async function runAgent(
     const durationMs = Date.now() - startTime;
 
     logToFile(`Agent run completed in ${Math.round(durationMs / 1000)}s`);
+    logToFile('Session ID for resuming:', sessionId);
 
     spinner.stop(successMessage);
+    return sessionId;
   } catch (error) {
     spinner.stop(errorMessage);
     clack.log.error(`Error: ${(error as Error).message}`);

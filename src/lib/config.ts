@@ -3,6 +3,7 @@ import { Integration } from './constants';
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
+import clack from '../utils/clack';
 
 type IntegrationConfig = {
   detect: (options: Pick<WizardOptions, 'installDir'>) => Promise<boolean>;
@@ -113,7 +114,16 @@ async function detectVercelAiSdkProject(
       };
 
       // Check for 'ai' package or AI SDK providers
-      if ('ai' in deps || '@ai-sdk/openai' in deps || '@ai-sdk/anthropic' in deps) {
+      if ('ai' in deps) {
+        clack.log.info('✓ Found "ai" package in dependencies');
+        return true;
+      }
+      if ('@ai-sdk/openai' in deps) {
+        clack.log.info('✓ Found "@ai-sdk/openai" package in dependencies');
+        return true;
+      }
+      if ('@ai-sdk/anthropic' in deps) {
+        clack.log.info('✓ Found "@ai-sdk/anthropic" package in dependencies');
         return true;
       }
     } catch {
@@ -140,6 +150,7 @@ async function detectVercelAiSdkProject(
       const content = await fs.promises.readFile(filePath, 'utf-8');
 
       if (aiSdkImportPatterns.some(pattern => pattern.test(content))) {
+        clack.log.info(`✓ Found AI SDK imports in source file: ${file}`);
         return true;
       }
     } catch {

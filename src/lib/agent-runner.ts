@@ -9,138 +9,212 @@ import {
   askForAIConsent,
   confirmContinueIfNoOrDirtyGitRepo,
   printWelcome,
+  waitForUserKeyPress,
 } from '../utils/clack-utils';
 import { writeApiKeyToEnv } from '../utils/environment';
 import fs from 'fs';
 import path from 'path';
 import clack from '../utils/clack';
-import { initializeAgent, runAgent } from './agent-interface';
+import { initializeAgent, runAgent, type AgentRunConfig } from './agent-interface';
 import { logToFile, LOG_FILE_PATH } from '../utils/debug';
 import chalk from 'chalk';
 import { askForWizardLogin } from '../utils/clack-utils';
 import { getUserApiKey } from '../utils/oauth';
 import axios from 'axios';
-import { API_BASE_URL } from './constants';
+import { API_BASE_URL, TEST_PORT, TEST_URL } from './constants';
+import http from 'http';
 
 /**
- * Poll the events endpoint to check if integration is successful
+ * Create an HTTP server to receive test events
  */
-async function pollForEvents(
-  accessToken: string,
-  onEventsFound: () => void,
+function createTestServer(): {
+  server: http.Server;
+  getEvent: () => Promise<any>;
+  getReceivedEvents: () => any[];
+  close: () => void;
+} {
+  const eventsReceived: any[] = [];
+  let eventResolver: ((value: any) => void) | null = null;
+  let completedEvent: any = null;
+
+  const server = http.createServer((req, res) => {
+    if (req.method === 'POST') {
+      let body = '';
+
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+
+      req.on('end', () => {
+        try {
+          const event = JSON.parse(body);
+          eventsReceived.push(event);
+
+          // Log the request to clack
+          clack.log.info(
+            chalk.cyan('Request received:') +
+            '\n' +
+            chalk.dim(`Method: ${req.method}`) +
+            '\n' +
+            chalk.dim(`URL: ${req.url}`) +
+            '\n' +
+            chalk.dim(`Headers: ${JSON.stringify(req.headers, null, 2)}`) +
+            '\n' +
+            chalk.dim(`Body: ${JSON.stringify(event, null, 2)}`),
+          );
+
+          // Check if this is the completion event (is_pending === false)
+          if (event.is_pending === false || event.is_pending === 'false') {
+            completedEvent = event;
+
+            // Resolve the promise if someone is waiting
+            if (eventResolver) {
+              eventResolver(eventsReceived);
+              eventResolver = null;
+            }
+          } else {
+            clack.log.info(
+              chalk.yellow(`Event received with is_pending=${event.is_pending}. Waiting for completion event...`)
+            );
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          clack.log.error(
+            chalk.red('Failed to parse request:') +
+            '\n' +
+            chalk.dim(`Error: ${error instanceof Error ? error.message : String(error)}`) +
+            '\n' +
+            chalk.dim(`Body: ${body}`),
+          );
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+    } else {
+      clack.log.warn(
+        chalk.yellow('Non-POST request received:') +
+        '\n' +
+        chalk.dim(`Method: ${req.method}`) +
+        '\n' +
+        chalk.dim(`URL: ${req.url}`),
+      );
+      res.writeHead(404);
+      res.end();
+    }
+  });
+
+  return {
+    server,
+    getEvent: () => {
+      // If completed event already received, return all events immediately
+      if (completedEvent) {
+        return Promise.resolve(eventsReceived);
+      }
+
+      // Otherwise, wait for completion event
+      return new Promise((resolve) => {
+        eventResolver = resolve;
+      });
+    },
+    getReceivedEvents: () => {
+      // Return all events received so far, even if no completion event yet
+      return eventsReceived;
+    },
+    close: () => {
+      return new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            logToFile('Error closing test server:', err);
+            // Resolve anyway to not block cleanup
+            resolve();
+          } else {
+            logToFile('Test server closed successfully');
+            resolve();
+          }
+        });
+      });
+    },
+  };
+}
+
+/**
+ * Test the integration by waiting for events on a local test server
+ */
+async function testIntegration(
+  agentConfig: AgentRunConfig,
+  sessionId: string | undefined,
+  config: FrameworkConfig,
+  options: WizardOptions,
+  spinner: any,
 ): Promise<void> {
-  const eventsUrl = `${API_BASE_URL}/api/cli/events/list`;
-  const pollInterval = 2000; // Poll every 2 seconds
+  const { server, getEvent, close, getReceivedEvents } = createTestServer();
 
-  while (true) {
-    try {
-      const response = await axios.get(eventsUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+  try {
+    // Start the server
+    await new Promise<void>((resolve, reject) => {
+      server.listen(TEST_PORT, () => {
+        logToFile(`Test server listening on ${TEST_URL}`);
+        resolve();
       });
+      server.on('error', reject);
+    });
 
-      // Check if there are any events
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        onEventsFound();
-        break;
-      }
-    } catch (error) {
-      // Silently continue polling on errors
-      if (axios.isAxiosError(error)) {
-        logToFile('Error polling events:', error.response?.data || error.message);
+    clack.log.step(
+      chalk.cyan('\nTest your integration:') +
+      '\n' +
+      chalk.dim(`Send an event through your app.`) +
+      '\n' +
+      chalk.dim('Waiting for completion event (is_pending=false)...') +
+      '\n' +
+      chalk.dim('Press any key to continue without waiting...'),
+    );
+
+    // Wait for either an event or user keypress
+    const eventPromise = getEvent();
+    const keyPressPromise = waitForUserKeyPress();
+
+    const result = await Promise.race([
+      eventPromise.then((events) => ({ type: 'event' as const, events })),
+      keyPressPromise.then(() => ({ type: 'keypress' as const })),
+    ]);
+
+    // Check if event was received
+    let eventData: any = null;
+    if (result.type === 'event') {
+      eventData = result.events;
+    } else {
+      // If user pressed key, check if any pending events were received
+      const receivedEvents = getReceivedEvents();
+      if (receivedEvents.length > 0) {
+        eventData = receivedEvents;
+        clack.log.warn(
+          chalk.yellow(`\nReceived ${receivedEvents.length} event(s) but no completion event (is_pending=false) yet.`)
+        );
       }
     }
 
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
-  }
-}
+    // Build feedback for agent
+    const feedback = buildFeedbackPrompt(eventData, TEST_URL);
 
-/**
- * Wait for user to press any key
- */
-async function waitForUserKeyPress(): Promise<void> {
-  return new Promise((resolve) => {
-    const stdin = process.stdin;
-
-    // Check if stdin is a TTY and can be set to raw mode
-    if (!stdin.isTTY) {
-      // If not a TTY, just resolve immediately (shouldn't happen in normal usage)
-      resolve();
-      return;
-    }
-
-    const wasRaw = stdin.isRaw;
-
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.setEncoding('utf8');
-
-    const onData = () => {
-      stdin.setRawMode(wasRaw);
-      stdin.pause();
-      stdin.removeListener('data', onData);
-      resolve();
-    };
-
-    stdin.once('data', onData);
-  });
-}
-
-/**
- * Test the integration by waiting for events
- */
-async function testIntegration(accessToken: string): Promise<boolean> {
-  clack.log.step(
-    chalk.cyan('\nTest your integration:') +
-    '\n' +
-    chalk.dim('Send an event through your app (e.g., make an OpenAI API call).') +
-    '\n' +
-    chalk.dim('Press any key when done to continue...'),
-  );
-
-  let eventsFound = false;
-  let userPressedKey = false;
-
-  // Start polling for events
-  const pollPromise = pollForEvents(accessToken, () => {
-    eventsFound = true;
-  });
-
-  // Wait for user keypress
-  const keyPressPromise = waitForUserKeyPress().then(() => {
-    userPressedKey = true;
-  });
-
-  // Race between polling finding events and user pressing a key
-  await Promise.race([pollPromise, keyPressPromise]);
-
-  // If events were found, we're done
-  if (eventsFound) {
-    return true;
-  }
-
-  // If user pressed key but no events found, check one last time
-  if (userPressedKey) {
-    try {
-      const eventsUrl = `${API_BASE_URL}/api/cli/events/list`;
-      const response = await axios.get(eventsUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+    // Run agent with feedback, resuming the previous session if we have a session ID
+    if (sessionId) {
+      await runAgent(agentConfig, feedback, options, spinner, {
+        spinnerMessage: 'Analyzing integration test results...',
+        successMessage: 'Integration verification complete',
+        errorMessage: 'Failed to analyze integration results',
+        resume: sessionId,
       });
-
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        return true;
-      }
-    } catch (error) {
-      logToFile('Error checking events:', error);
+    } else {
+      clack.log.warn(
+        chalk.yellow('No session ID available, skipping agent analysis'),
+      );
     }
-
-    return false;
+  } finally {
+    // Clean up server
+    close();
   }
-
-  return false;
 }
 
 /**
@@ -152,6 +226,7 @@ export async function runAgentWizard(
   options: WizardOptions,
   additionalContext?: {
     otelProvider?: string;
+    otelPlatform?: string;
   },
 ): Promise<void> {
   // Setup phase
@@ -200,7 +275,8 @@ export async function runAgentWizard(
   // Build integration prompt
   const integrationPrompt = await buildIntegrationPrompt(config, {
     frameworkVersion: frameworkVersion || 'latest',
-    otelProvider: additionalContext?.otelProvider || 'standalone',
+    otelProvider: additionalContext?.otelProvider || '',
+    otelPlatform: additionalContext?.otelPlatform,
   });
 
   if (options.debug) {
@@ -218,26 +294,39 @@ export async function runAgentWizard(
     options,
   );
 
-  await runAgent(agent, integrationPrompt, options, spinner, {
+  const sessionId = await runAgent(agent, integrationPrompt, options, spinner, {
     estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
     spinnerMessage: SPINNER_MESSAGE,
     successMessage: config.ui.successMessage,
     errorMessage: 'Integration failed',
   });
 
-  // Test the integration
-  const integrationSuccess = await testIntegration(token.access_token);
-
-  if (!integrationSuccess) {
-    clack.log.error(
-      chalk.red('\nIntegration test failed: No events detected.') +
-      '\n' +
-      chalk.dim('Make sure your app is running and making OpenAI API calls.'),
-    );
-    abort('Integration test failed', 1);
+  // Run setup function if provided (e.g., add test endpoint)
+  if (config.setup) {
+    spinner.start('Configuring test environment...');
+    try {
+      await config.setup();
+      spinner.stop('Test environment configured');
+    } catch (error) {
+      spinner.stop('Setup encountered issues (non-fatal)');
+      logToFile('Setup error:', error);
+    }
   }
 
-  clack.log.success(chalk.green('Integration test successful! Events detected.'));
+  // Test the integration with agent feedback loop
+  await testIntegration(agent, sessionId, config, options, spinner);
+
+  // Run cleanup function if provided
+  if (config.cleanup) {
+    spinner.start('Cleaning up test configuration...');
+    try {
+      await config.cleanup();
+      spinner.stop('Test configuration cleaned up');
+    } catch (error) {
+      spinner.stop('Cleanup encountered issues (non-fatal)');
+      logToFile('Cleanup error:', error);
+    }
+  }
 
   // Build outro message
   const changes = [...config.ui.getOutroChanges({})].filter(Boolean);
@@ -270,6 +359,7 @@ async function buildIntegrationPrompt(
   context: {
     frameworkVersion: string;
     otelProvider: string;
+    otelPlatform?: string;
   },
 ): Promise<string> {
   let documentation = '';
@@ -277,6 +367,7 @@ async function buildIntegrationPrompt(
     try {
       documentation = await config.prompts.getDocumentation({
         otelProvider: context.otelProvider,
+        otelPlatform: context.otelPlatform,
       });
     } catch (error) {
       logToFile('Error loading documentation:', error);
@@ -322,4 +413,96 @@ Instructions:
 4. Follow best practices for ${config.metadata.name} and ensure the integration doesn't break existing functionality.
 
 Focus on files where OpenAI API calls are made - these are the files that need to be modified to integrate raindrop.ai.${docsSection}`;
+}
+
+/**
+ * Build feedback prompt for the agent based on test results
+ */
+function buildFeedbackPrompt(eventData: any, testUrl: string): string {
+  if (eventData) {
+    clack.log.success(
+      chalk.green('\nEvent received!') +
+      '\n' +
+      chalk.dim(JSON.stringify(eventData, null, 2)),
+    );
+
+    // Check if eventData is an array (multiple events) or a single event
+    const events = Array.isArray(eventData) ? eventData : [eventData];
+
+    // Verify required fields
+    const requiredFields = ['input', 'output', 'model', 'convo_id', 'event_id', 'user_id'];
+    const missingFields: string[] = [];
+    const fieldIssues: string[] = [];
+
+    // Check each event for required fields
+    events.forEach((event, index) => {
+      requiredFields.forEach((field) => {
+        if (!(field in event) || event[field] === null || event[field] === undefined) {
+          const issue = `Event ${index + 1}: Missing or null field '${field}'`;
+          if (!missingFields.includes(issue)) {
+            missingFields.push(issue);
+          }
+        }
+      });
+    });
+
+    // Check for completion indicator (is_pending=False)
+    const hasCompletionEvent = events.some(
+      (event) => event.is_pending === false || event.is_pending === 'false'
+    );
+
+    if (!hasCompletionEvent && events.length > 0) {
+      fieldIssues.push(
+        `Found ${events.length} event(s) but no event with is_pending=False. This suggests the request likely didn't properly call interaction.finish().`
+      );
+    }
+
+    // Build verification message
+    let verificationMessage = `Integration test result: Event(s) were successfully received at ${testUrl}.
+
+Event data received:
+${JSON.stringify(eventData, null, 2)}
+
+Please verify:`;
+
+    if (missingFields.length > 0) {
+      verificationMessage += `\n\n❌ Missing required fields:\n${missingFields.map(f => `  - ${f}`).join('\n')}`;
+    }
+
+    if (fieldIssues.length > 0) {
+      verificationMessage += `\n\n⚠️  Issues detected:\n${fieldIssues.map(f => `  - ${f}`).join('\n')}`;
+    }
+
+    verificationMessage += `\n\nRequired fields to verify:
+1. input - Should contain the input/prompt sent to the model
+2. output - Should contain the model's response
+3. model - Should specify which model was used
+4. convo_id - Should be a unique conversation identifier
+5. event_id - Should be a unique event identifier
+6. user_id - Should identify the user making the request
+7. is_pending - Should be False for completed interactions (indicates interaction.finish() was called)
+
+${missingFields.length > 0 || fieldIssues.length > 0
+        ? 'Please fix the integration code to ensure all required fields are present and interaction.finish() is properly called.'
+        : 'If everything looks correct, respond with a brief confirmation.'}`;
+
+    return verificationMessage;
+  } else {
+    clack.log.warn(
+      chalk.yellow('\nNo event received at the test server.') +
+      '\n' +
+      chalk.dim('The integration may not be working correctly.'),
+    );
+
+    return `Integration test result: No event was received at ${testUrl} when the user tested their app.
+
+This suggests the integration is not working correctly. Please troubleshoot:
+1. Check if the raindrop.ai SDK is properly initialized
+2. Verify the endpoint URL is correctly configured (should be ${testUrl})
+3. Check if the OpenAI API calls are being intercepted
+4. Look for any error messages in the code or configuration
+5. Ensure the app is actually making OpenAI API calls during the test
+
+Fix any issues found and explain what was wrong.`;
+  }
 }

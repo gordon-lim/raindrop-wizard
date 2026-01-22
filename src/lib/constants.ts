@@ -31,6 +31,8 @@ export const OAUTH_TOKEN_URL = `${OAUTH_URL}/propelauth/oauth/token`;
 export const OAUTH_USERINFO_URL = `${OAUTH_URL}/propelauth/oauth/userinfo`;
 export const OAUTH_PORT = 8259;
 export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_PORT}/callback`;
+export const TEST_PORT = 1234;
+export const TEST_URL = `http://localhost:${TEST_PORT}`;
 
 export const API_BASE_URL = 'http://localhost:3000';
 export const API_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;

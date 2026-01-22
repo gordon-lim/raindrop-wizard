@@ -21,7 +21,9 @@ import os
 import raindrop.analytics as raindrop
 
 # Recommended: load from env var
-raindrop.init(os.getenv("RAINDROP_WRITE_KEY") or "YOUR_WRITE_KEY")
+raindrop.init(
+    os.getenv("RAINDROP_WRITE_KEY") or "YOUR_WRITE_KEY",
+)
 ```
 
 ## Tracing (Beta)
