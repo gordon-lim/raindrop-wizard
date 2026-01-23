@@ -149,7 +149,7 @@ async function detectVercelAiSdkProject(
       const filePath = path.join(options.installDir, file);
       const content = await fs.promises.readFile(filePath, 'utf-8');
 
-      if (aiSdkImportPatterns.some(pattern => pattern.test(content))) {
+      if (aiSdkImportPatterns.some((pattern) => pattern.test(content))) {
         clack.log.info(`✓ Found AI SDK imports in source file: ${file}`);
         return true;
       }
@@ -173,8 +173,8 @@ export const INTEGRATION_CONFIG = {
   },
   [Integration.vercelAiSdk]: {
     detect: detectVercelAiSdkProject,
-    docsUrl: 'https://www.raindrop.ai/docs/sdk/auto-vercel-ai'
-  }
+    docsUrl: 'https://www.raindrop.ai/docs/sdk/auto-vercel-ai',
+  },
 } as const satisfies Record<Integration, IntegrationConfig>;
 
 export const INTEGRATION_ORDER = [
