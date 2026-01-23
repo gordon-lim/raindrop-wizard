@@ -72,13 +72,34 @@ describe.skip('installPackage', () => {
 
     const execSpy = jest
       .spyOn(ChildProcess, 'exec')
-      // @ts-expect-error - don't care about the return value
-      .mockImplementationOnce((cmd, cb) => {
-        if (cb) {
-          // @ts-expect-error - don't care about the options value
-          cb(null, '', '');
-        }
-      });
+      .mockImplementationOnce(
+        (
+          _cmd: string,
+          optionsOrCallback?:
+            | ((
+                error: ChildProcess.ExecException | null,
+                stdout: string | Buffer,
+                stderr: string | Buffer,
+              ) => void)
+            | ChildProcess.ExecOptions
+            | null,
+          maybeCallback?: (
+            error: ChildProcess.ExecException | null,
+            stdout: string | Buffer,
+            stderr: string | Buffer,
+          ) => void,
+        ): ChildProcess.ChildProcess => {
+          // Handle both overload signatures
+          const callback =
+            typeof optionsOrCallback === 'function'
+              ? optionsOrCallback
+              : maybeCallback;
+          if (callback) {
+            callback(null, '', '');
+          }
+          return {} as ChildProcess.ChildProcess;
+        },
+      );
 
     await installPackage({
       alreadyInstalled: false,
@@ -113,13 +134,34 @@ describe.skip('installPackage', () => {
 
       const execSpy = jest
         .spyOn(ChildProcess, 'exec')
-        // @ts-expect-error - don't care about the return value
-        .mockImplementationOnce((cmd, cb) => {
-          if (cb) {
-            // @ts-expect-error - don't care about the options value
-            cb(null, '', '');
-          }
-        });
+        .mockImplementationOnce(
+          (
+            _cmd: string,
+            optionsOrCallback?:
+              | ((
+                  error: ChildProcess.ExecException | null,
+                  stdout: string | Buffer,
+                  stderr: string | Buffer,
+                ) => void)
+              | ChildProcess.ExecOptions
+              | null,
+            maybeCallback?: (
+              error: ChildProcess.ExecException | null,
+              stdout: string | Buffer,
+              stderr: string | Buffer,
+            ) => void,
+          ): ChildProcess.ChildProcess => {
+            // Handle both overload signatures
+            const callback =
+              typeof optionsOrCallback === 'function'
+                ? optionsOrCallback
+                : maybeCallback;
+            if (callback) {
+              callback(null, '', '');
+            }
+            return {} as ChildProcess.ChildProcess;
+          },
+        );
 
       await installPackage({
         alreadyInstalled: false,

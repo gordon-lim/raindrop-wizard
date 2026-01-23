@@ -10,7 +10,6 @@ import {
   ISSUES_URL,
   OAUTH_AUTHORIZE_URL,
   OAUTH_CLIENT_ID,
-  OAUTH_CLIENT_SECRET,
   OAUTH_PORT,
   OAUTH_REDIRECT_URI,
   OAUTH_TOKEN_URL,
@@ -58,10 +57,15 @@ const OAuthUserInfoSchema = z.object({
   first_name: z.string().optional(),
   last_name: z.string().optional(),
   picture_url: z.string().optional(),
-  org_id_to_org_info: z.record(z.string(), z.object({
-    org_id: z.string(),
-    org_name: z.string(),
-  })).optional(),
+  org_id_to_org_info: z
+    .record(
+      z.string(),
+      z.object({
+        org_id: z.string(),
+        org_name: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export type OAuthTokenResponse = z.infer<typeof OAuthTokenResponseSchema>;
@@ -133,15 +137,17 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>Raindrop wizard - Authorization ${isAccessDenied ? 'cancelled' : 'failed'
-          }</title>
+              <title>Raindrop wizard - Authorization ${
+                isAccessDenied ? 'cancelled' : 'failed'
+              }</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
             <body>
-              <p>${isAccessDenied
-            ? 'Authorization cancelled.'
-            : `Authorization failed.`
-          }</p>
+              <p>${
+                isAccessDenied
+                  ? 'Authorization cancelled.'
+                  : `Authorization failed.`
+              }</p>
               <p>Return to your terminal.</p>
             </body>
           </html>
@@ -258,7 +264,10 @@ export async function performOAuthFlow(
   authUrl.searchParams.set('scope', config.scopes.join(' '));
 
   const signupUrl = new URL(
-    `${OAUTH_AUTHORIZE_URL.replace('/authorize', '/signup')}?next=${encodeURIComponent(authUrl.toString())}`,
+    `${OAUTH_AUTHORIZE_URL.replace(
+      '/authorize',
+      '/signup',
+    )}?next=${encodeURIComponent(authUrl.toString())}`,
   );
 
   const localSignupUrl = `http://localhost:${OAUTH_PORT}/authorize?signup=true`;
@@ -275,11 +284,12 @@ export async function performOAuthFlow(
   clack.log.info(
     `${chalk.bold(
       "If the browser window didn't open automatically, please open the following link to be redirected to Raindrop:",
-    )}\n\n${chalk.cyan(urlToOpen)}${config.signup
-      ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
-        localLoginUrl,
-      )}`
-      : ``
+    )}\n\n${chalk.cyan(urlToOpen)}${
+      config.signup
+        ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
+            localLoginUrl,
+          )}`
+        : ``
     }`,
   );
 
@@ -330,14 +340,15 @@ export async function performOAuthFlow(
       );
     } else {
       clack.log.error(
-        `${chalk.red('Authorization failed:')}\n\n${error.message
+        `${chalk.red('Authorization failed:')}\n\n${
+          error.message
         }\n\n${chalk.dim(
           `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
         )}`,
       );
     }
 
-    await abort();
+    abort();
     throw error;
   }
 }

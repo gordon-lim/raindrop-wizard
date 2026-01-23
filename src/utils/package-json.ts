@@ -1,14 +1,9 @@
-export type PackageDotJson = {
-  version?: string;
-  scripts?: Record<string, string | undefined>;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  resolutions?: Record<string, string>;
-  overrides?: Record<string, string>;
-  pnpm?: {
-    overrides?: Record<string, string>;
-  };
-};
+import type { PackageJson } from './package-json-types';
+
+/**
+ * @deprecated Use PackageJson from package-json-types.ts instead
+ */
+export type PackageDotJson = PackageJson;
 
 type NpmPackage = {
   name: string;
@@ -23,7 +18,7 @@ type NpmPackage = {
  */
 export function findInstalledPackageFromList(
   packageNamesList: string[],
-  packageJson: PackageDotJson,
+  packageJson: PackageJson,
 ): NpmPackage | undefined {
   return packageNamesList
     .map((packageName) => ({
@@ -35,14 +30,14 @@ export function findInstalledPackageFromList(
 
 export function hasPackageInstalled(
   packageName: string,
-  packageJson: PackageDotJson,
+  packageJson: PackageJson,
 ): boolean {
   return getPackageVersion(packageName, packageJson) !== undefined;
 }
 
 export function getPackageVersion(
   packageName: string,
-  packageJson: PackageDotJson,
+  packageJson: PackageJson,
 ): string | undefined {
   return (
     packageJson?.dependencies?.[packageName] ||

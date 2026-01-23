@@ -105,10 +105,41 @@ export async function detectEnvVarPrefix(
   return 'VITE_PUBLIC_';
 }
 
+/**
+ * Validates API key format to prevent injection attacks and file corruption.
+ * API keys should be alphanumeric with optional hyphens/underscores, 20-100 chars.
+ *
+ * @param key - The API key to validate
+ * @returns true if the key is valid, false otherwise
+ */
+function validateApiKey(key: string): boolean {
+  // API keys should be alphanumeric with optional hyphens/underscores
+  // Length: 20-100 characters (reasonable bounds for API keys)
+  const API_KEY_PATTERN = /^[a-zA-Z0-9_-]{20,100}$/;
+
+  // Check pattern and ensure no dangerous characters
+  return (
+    API_KEY_PATTERN.test(key) &&
+    !key.includes('\n') &&
+    !key.includes('\r') &&
+    !key.includes('\0')
+  );
+}
+
 export async function writeApiKeyToEnv(
   apiKey: string,
   installDir: string,
 ): Promise<void> {
+  // Sanitize input by trimming and removing dangerous characters
+  const sanitizedKey = apiKey.trim().replace(/[\r\n\0]/g, '');
+
+  // Validate the sanitized key
+  if (!validateApiKey(sanitizedKey)) {
+    throw new Error(
+      'Invalid API key format. API keys must be 20-100 characters long and contain only alphanumeric characters, hyphens, and underscores.',
+    );
+  }
+
   const envPath = path.join(installDir, '.env');
   let envContent = '';
 
@@ -123,12 +154,14 @@ export async function writeApiKeyToEnv(
     // Replace existing key
     envContent = envContent.replace(
       /RAINDROP_WRITE_KEY=.*/,
-      `RAINDROP_WRITE_KEY=${apiKey}`,
+      `RAINDROP_WRITE_KEY=${sanitizedKey}`,
     );
   } else {
     // Add new key
     envContent =
-      envContent.trim() + (envContent ? '\n' : '') + `RAINDROP_WRITE_KEY=${apiKey}\n`;
+      envContent.trim() +
+      (envContent ? '\n' : '') +
+      `RAINDROP_WRITE_KEY=${sanitizedKey}\n`;
   }
 
   await fs.promises.writeFile(envPath, envContent, 'utf-8');

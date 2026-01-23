@@ -2,22 +2,101 @@
  * Agent prompt templates for raindrop.ai integration wizard
  */
 
-interface IntegrationPromptParams {
-  frameworkName: string;
-  frameworkVersion: string;
-  otelProviderInfo: string;
-  documentation: string;
+import type { FrameworkConfig } from './framework-config';
+import { logToFile } from '../utils/debug';
+
+/**
+ * Build test feedback message for agent
+ */
+export function buildTestFeedbackMessage(
+  events: Array<{ url: string; data: any }>,
+  userFeedback: string,
+  attemptNumber: number,
+): string {
+  const eventSummary =
+    events.length > 0
+      ? events
+          .map((event, idx) => {
+            const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
+            const spanCount = event.data.spans?.length || 0;
+            const aiAttrs = event.data.aiAttributes || event.data;
+
+            return `Event #${idx + 1} at ${event.url}:
+Format: ${format}
+${spanCount > 0 ? `Spans: ${spanCount}` : ''}
+Data: ${JSON.stringify(aiAttrs, null, 2)}`;
+          })
+          .join('\n\n')
+      : 'No events received.';
+
+  return `# Integration Test Results (Attempt ${attemptNumber})
+
+## Events Collected
+
+${eventSummary}
+
+## User Feedback
+
+"${userFeedback}"
+
+## Your Task
+
+Analyze the events and user feedback, then fix the code to address any issues:
+1. Review the event data structure and user's comments
+2. Identify what's missing or incorrect
+3. Update the integration code to fix the problems
+4. The wizard will automatically retest after your fixes
+
+You have ${3 - attemptNumber} attempt(s) remaining.`;
 }
 
 /**
- * Main integration prompt template
+ * Format OTEL provider info string
  */
-export function integrationPrompt({
-  frameworkName,
-  frameworkVersion,
-  otelProviderInfo,
-  documentation,
-}: IntegrationPromptParams): string {
+function formatOtelProviderInfo(otelProvider: string): string {
+  if (otelProvider === 'sentry') {
+    return (
+      `- OTEL Provider: 'sentry'\n` +
+      `Integrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry ` +
+      `configuration.`
+    );
+  } else if (otelProvider === 'other') {
+    return (
+      `- OTEL Provider: 'other'\n` +
+      `Integrate raindrop.ai alongside an existing OTEL provider other than Sentry. ` +
+      `Ensure compatibility with the existing OTEL setup.`
+    );
+  }
+  return '';
+}
+
+/**
+ * Build the integration prompt for the agent.
+ * Uses shared base prompt with optional framework-specific documentation.
+ */
+export async function buildIntegrationPrompt(
+  config: FrameworkConfig,
+  context: {
+    frameworkVersion: string;
+    otelProvider?: string;
+  },
+): Promise<string> {
+  let documentation = '';
+  if (config.prompts.getDocumentation) {
+    try {
+      documentation = await config.prompts.getDocumentation();
+    } catch (error) {
+      logToFile('Error loading documentation:', error);
+      // Continue without documentation if loading fails
+    }
+  }
+
+  const otelProviderInfo = context.otelProvider
+    ? formatOtelProviderInfo(context.otelProvider)
+    : '';
+
+  const frameworkName = config.metadata.name;
+  const frameworkVersion = context.frameworkVersion;
   const docsSection = documentation
     ? `\n\nInstallation documentation:\n${documentation}\n`
     : '';
@@ -25,7 +104,8 @@ export function integrationPrompt({
   // Determine SDK description based on framework
   let sdkDescription: string;
   if (frameworkName === 'Vercel AI SDK') {
-    sdkDescription = '   - The project uses the Vercel AI SDK to make LLM API calls';
+    sdkDescription =
+      '   - The project uses the Vercel AI SDK to make LLM API calls';
   } else if (frameworkName === 'Python') {
     sdkDescription =
       '   - The project uses Python SDKs like openai, anthropic, google-generativeai, litellm, etc. to make LLM API calls';
@@ -64,6 +144,15 @@ ${sdkDescription}
 4. Follow best practices for ${frameworkName} and ensure the integration doesn't break existing
    functionality.
 
+5. Verify the build and check for errors before finishing:
+   - After making all changes, test the project to ensure it builds/runs without errors
+   - For TypeScript/JavaScript projects: run the build command (npm run build, pnpm build, yarn build, etc.)
+   - For Python projects: check for syntax errors by running the main server script (e.g., python app.py, python main.py, uvicorn main:app, flask run, or similar)
+   - If you encounter errors (compilation errors, import errors, syntax errors, type mismatches), fix them
+   - After fixing, re-run the build/server command to verify the fixes worked
+   - Repeat until the project builds or starts successfully without errors
+   - Also run type checking if available (tsc --noEmit for TypeScript, mypy for Python)
+
 Focus on files where LLM API calls are made - these are the files that need to be modified to
 integrate raindrop.ai. ${docsSection}
 
@@ -77,69 +166,4 @@ If issues are found:
 3. The wizard will automatically test again after you're done
 
 Maximum 3 test attempts will be allowed.`;
-}
-
-/**
- * Build test feedback message for agent
- */
-export function buildTestFeedbackMessage(
-  events: Array<{ url: string; data: any }>,
-  userFeedback: string,
-  attemptNumber: number,
-): string {
-  const eventSummary =
-    events.length > 0
-      ? events
-        .map((event, idx) => {
-          const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
-          const spanCount = event.data.spans?.length || 0;
-          const aiAttrs = event.data.aiAttributes || event.data;
-
-          return `Event #${idx + 1} at ${event.url}:
-Format: ${format}
-${spanCount > 0 ? `Spans: ${spanCount}` : ''}
-Data: ${JSON.stringify(aiAttrs, null, 2)}`;
-        })
-        .join('\n\n')
-      : 'No events received.';
-
-  return `# Integration Test Results (Attempt ${attemptNumber})
-
-## Events Collected
-
-${eventSummary}
-
-## User Feedback
-
-"${userFeedback}"
-
-## Your Task
-
-Analyze the events and user feedback, then fix the code to address any issues:
-1. Review the event data structure and user's comments
-2. Identify what's missing or incorrect
-3. Update the integration code to fix the problems
-4. The wizard will automatically retest after your fixes
-
-You have ${3 - attemptNumber} attempt(s) remaining.`;
-}
-
-/**
- * Format OTEL provider info string
- */
-export function formatOtelProviderInfo(otelProvider: string): string {
-  if (otelProvider === 'sentry') {
-    return (
-      `- OTEL Provider: 'sentry'\n` +
-      `Integrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry ` +
-      `configuration.`
-    );
-  } else if (otelProvider === 'other') {
-    return (
-      `- OTEL Provider: 'other'\n` +
-      `Integrate raindrop.ai alongside an existing OTEL provider other than Sentry. ` +
-      `Ensure compatibility with the existing OTEL setup.`
-    );
-  }
-  return '';
 }

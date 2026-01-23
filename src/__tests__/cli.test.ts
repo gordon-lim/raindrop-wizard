@@ -15,11 +15,10 @@ describe('CLI argument parsing', () => {
 
     // Reset environment
     process.env = { ...originalEnv };
-    delete process.env.RAINDROP_WIZARD_REGION;
-    delete process.env.RAINDROP_WIZARD_DEFAULT;
-    delete process.env.RAINDROP_WIZARD_CI;
-    delete process.env.RAINDROP_WIZARD_API_KEY;
-    delete process.env.RAINDROP_WIZARD_INSTALL_DIR;
+    delete process.env.RAINDROP_DEBUG;
+    delete process.env.RAINDROP_DEFAULT;
+    delete process.env.RAINDROP_WRITE_KEY;
+    delete process.env.RAINDROP_INSTALL_DIR;
 
     // Mock process.exit to prevent test runner from exiting
     process.exit = jest.fn() as any;
@@ -55,11 +54,11 @@ describe('CLI argument parsing', () => {
   }
 
   describe('--default flag', () => {
-    test('defaults to true when not specified', async () => {
+    test('defaults to false when not specified', async () => {
       await runCLI([]);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.default).toBe(true);
+      expect(args.default).toBe(false);
     });
 
     test('can be explicitly set to false with --no-default', async () => {
@@ -77,195 +76,104 @@ describe('CLI argument parsing', () => {
     });
   });
 
-  describe('--region flag', () => {
+  describe('--integration flag', () => {
     test('is undefined when not specified', async () => {
       await runCLI([]);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.region).toBeUndefined();
+      expect(args.integration).toBeUndefined();
     });
 
-    test.each(['us', 'eu'])(
-      'accepts "%s" as a valid region',
-      async (region) => {
-        await runCLI(['--region', region]);
+    test.each(['python', 'typescript'])(
+      'accepts "%s" as a valid integration',
+      async (integration) => {
+        await runCLI(['--integration', integration]);
 
         const args = getLastCallArgs(mockRunWizard);
-        expect(args.region).toBe(region);
+        expect(args.integration).toBe(integration);
       },
     );
   });
 
   describe('environment variables', () => {
-    test('respects RAINDROP_WIZARD_REGION', async () => {
-      process.env.RAINDROP_WIZARD_REGION = 'eu';
+    test('respects RAINDROP_DEBUG', async () => {
+      process.env.RAINDROP_DEBUG = 'true';
 
       await runCLI([]);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.region).toBe('eu');
+      expect(args.debug).toBe(true);
     });
 
-    test('respects RAINDROP_WIZARD_DEFAULT', async () => {
-      process.env.RAINDROP_WIZARD_DEFAULT = 'false';
+    test('respects RAINDROP_DEFAULT', async () => {
+      process.env.RAINDROP_DEFAULT = 'true';
 
       await runCLI([]);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.default).toBe(false);
+      expect(args.default).toBe(true);
     });
 
     test('CLI args override environment variables', async () => {
-      process.env.RAINDROP_WIZARD_REGION = 'us';
-      process.env.RAINDROP_WIZARD_DEFAULT = 'false';
+      process.env.RAINDROP_DEBUG = 'false';
+      process.env.RAINDROP_DEFAULT = 'false';
 
-      await runCLI(['--region', 'eu', '--default']);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.region).toBe('eu');
-      expect(args.default).toBe(true);
-    });
-
-    test('region is undefined when no env var or CLI arg', async () => {
-      await runCLI([]);
+      await runCLI(['--debug', '--default']);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.region).toBeUndefined();
-    });
-  });
-
-  describe('backward compatibility', () => {
-    test('all existing flags continue to work', async () => {
-      await runCLI([
-        '--debug',
-        '--signup',
-        '--force-install',
-        '--install-dir',
-        '/custom/path',
-        '--integration',
-        'nextjs',
-      ]);
-
-      const args = getLastCallArgs(mockRunWizard);
-
-      // Existing flags
       expect(args.debug).toBe(true);
-      expect(args.signup).toBe(true);
-      expect(args['force-install']).toBe(true);
-      expect(args['install-dir']).toBe('/custom/path');
-      expect(args.integration).toBe('nextjs');
-
-      // New defaults
       expect(args.default).toBe(true);
-      expect(args.region).toBeUndefined();
     });
-  });
 
-  describe('--ci flag', () => {
-    test('defaults to false when not specified', async () => {
+    test('respects RAINDROP_WRITE_KEY', async () => {
+      process.env.RAINDROP_WRITE_KEY = 'phx_test_key';
+
       await runCLI([]);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.ci).toBe(false);
-    });
-
-    test('can be set to true', async () => {
-      await runCLI([
-        '--ci',
-        '--region',
-        'us',
-        '--api-key',
-        'phx_test',
-        '--install-dir',
-        '/tmp/test',
-      ]);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.ci).toBe(true);
-    });
-
-    test('requires --region when --ci is set', async () => {
-      await runCLI([
-        '--ci',
-        '--api-key',
-        'phx_test',
-        '--install-dir',
-        '/tmp/test',
-      ]);
-
-      expect(process.exit).toHaveBeenCalledWith(1);
-    });
-
-    test('requires --api-key when --ci is set', async () => {
-      await runCLI(['--ci', '--region', 'us', '--install-dir', '/tmp/test']);
-
-      expect(process.exit).toHaveBeenCalledWith(1);
-    });
-
-    test('requires --install-dir when --ci is set', async () => {
-      await runCLI(['--ci', '--region', 'us', '--api-key', 'phx_test']);
-
-      expect(process.exit).toHaveBeenCalledWith(1);
-    });
-
-    test('passes --api-key to runWizard', async () => {
-      await runCLI([
-        '--ci',
-        '--region',
-        'us',
-        '--api-key',
-        'phx_test_key',
-        '--install-dir',
-        '/tmp/test',
-      ]);
 
       const args = getLastCallArgs(mockRunWizard);
       expect(args.apiKey).toBe('phx_test_key');
     });
   });
 
-  describe('CI environment variables', () => {
-    test('respects RAINDROP_WIZARD_CI', async () => {
-      process.env.RAINDROP_WIZARD_CI = 'true';
-      process.env.RAINDROP_WIZARD_REGION = 'us';
-      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
-      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
-
-      await runCLI([]);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.ci).toBe(true);
-    });
-
-    test('respects RAINDROP_WIZARD_API_KEY', async () => {
-      process.env.RAINDROP_WIZARD_CI = 'true';
-      process.env.RAINDROP_WIZARD_REGION = 'eu';
-      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
-      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
-
-      await runCLI([]);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.apiKey).toBe('phx_env_key');
-    });
-
-    test('CLI args override CI environment variables', async () => {
-      process.env.RAINDROP_WIZARD_CI = 'true';
-      process.env.RAINDROP_WIZARD_REGION = 'us';
-      process.env.RAINDROP_WIZARD_API_KEY = 'phx_env_key';
-      process.env.RAINDROP_WIZARD_INSTALL_DIR = '/tmp/test';
-
+  describe('all flags', () => {
+    test('all flags work together', async () => {
       await runCLI([
-        '--region',
-        'eu',
-        '--api-key',
-        'phx_cli_key',
+        '--debug',
+        '--default',
+        '--force-install',
         '--install-dir',
-        '/other/path',
+        '/custom/path',
+        '--integration',
+        'typescript',
+        '--api-key',
+        'phx_test_key',
       ]);
 
       const args = getLastCallArgs(mockRunWizard);
-      expect(args.region).toBe('eu');
+
+      expect(args.debug).toBe(true);
+      expect(args.default).toBe(true);
+      expect(args['force-install']).toBe(true);
+      expect(args['install-dir']).toBe('/custom/path');
+      expect(args.integration).toBe('typescript');
+      expect(args.apiKey).toBe('phx_test_key');
+    });
+  });
+
+  describe('--api-key flag', () => {
+    test('can be passed via CLI', async () => {
+      await runCLI(['--api-key', 'phx_test_key']);
+
+      const args = getLastCallArgs(mockRunWizard);
+      expect(args.apiKey).toBe('phx_test_key');
+    });
+
+    test('CLI args override environment variables', async () => {
+      process.env.RAINDROP_WRITE_KEY = 'phx_env_key';
+
+      await runCLI(['--api-key', 'phx_cli_key']);
+
+      const args = getLastCallArgs(mockRunWizard);
       expect(args.apiKey).toBe('phx_cli_key');
     });
   });

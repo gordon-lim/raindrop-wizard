@@ -33,7 +33,18 @@ export function debug(...args: unknown[]) {
     return;
   }
 
-  const msg = args.map((a) => prepareMessage(a)).join(' ');
+  // Don't sanitize debug logs to clack - they're for development
+  const msg = args
+    .map((a) => {
+      if (typeof a === 'string') {
+        return a;
+      }
+      if (a instanceof Error) {
+        return `${a.stack || ''}`;
+      }
+      return JSON.stringify(a, null, '\t');
+    })
+    .join(' ');
 
   clack.log.info(chalk.dim(msg));
 }

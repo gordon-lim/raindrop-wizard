@@ -1,4 +1,5 @@
 import type { Integration } from './constants';
+import type { PackageJson } from '../utils/package-json-types';
 
 /**
  * Configuration interface for framework-specific agent integrations.
@@ -34,7 +35,7 @@ export interface FrameworkMetadata {
  */
 export interface FrameworkDetection {
   /** Extract version from package.json */
-  getVersion: (packageJson: any) => string | undefined;
+  getVersion: (packageJson: PackageJson) => string | undefined;
 }
 
 /**
@@ -42,13 +43,10 @@ export interface FrameworkDetection {
  */
 export interface PromptConfig {
   /**
-   * Optional: Get documentation content to include in the prompt
-   * @param context Optional context for parameterized documentation (e.g., otelProvider, otelPlatform)
+   * Optional: Get documentation content to include in the prompt.
+   * May ask user questions to determine which documentation to load.
    */
-  getDocumentation?: (context?: {
-    otelProvider?: string;
-    otelPlatform?: string;
-  }) => Promise<string>;
+  getDocumentation?: () => Promise<string>;
 }
 
 /**

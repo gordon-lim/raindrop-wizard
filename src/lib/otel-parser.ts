@@ -6,6 +6,60 @@ import type { IKeyValue } from '@opentelemetry/otlp-transformer/build/esm/common
 import * as root from '@opentelemetry/otlp-transformer/build/esm/generated/root';
 
 /**
+ * Value types that can appear in OTEL key-value pairs
+ */
+type OtelValue =
+  | string
+  | number
+  | boolean
+  | null
+  | OtelValue[]
+  | Record<string, unknown>;
+
+/**
+ * Simplified span format for logging and display
+ */
+export interface SimpleSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  kind: number;
+  startTimeNano: string;
+  endTimeNano: string;
+  durationNano: string;
+  attributes: Record<string, OtelValue>;
+  status: {
+    code?: number;
+    message?: string;
+  };
+}
+
+/**
+ * Extracted AI/LLM attributes from a span
+ */
+export interface AIAttributes {
+  spanId: string;
+  name: string;
+  // AI SDK attributes (Vercel AI SDK)
+  operationId?: string;
+  prompt?: string;
+  responseText?: string;
+  toolCallName?: string;
+  toolCallInput?: string;
+  toolCallOutput?: string;
+  // GenAI semantic conventions (OpenAI, Anthropic, etc.)
+  genAiSystem?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  // Legacy Traceloop attributes
+  convoId?: string;
+  eventId?: string;
+  spanKind?: string;
+}
+
+/**
  * Convert binary ID (Uint8Array) to hex string
  */
 export function toHex(bytes: Uint8Array): string {
@@ -17,8 +71,10 @@ export function toHex(bytes: Uint8Array): string {
 /**
  * Convert KeyValue array to a plain object
  */
-export function keyValueArrayToObject(keyValues: IKeyValue[]): Record<string, any> {
-  const result: Record<string, any> = {};
+export function keyValueArrayToObject(
+  keyValues: IKeyValue[],
+): Record<string, OtelValue> {
+  const result: Record<string, OtelValue> = {};
 
   for (const kv of keyValues) {
     const key = kv.key;
@@ -30,16 +86,23 @@ export function keyValueArrayToObject(keyValues: IKeyValue[]): Record<string, an
     if (value.stringValue !== undefined && value.stringValue !== null) {
       result[key] = value.stringValue;
     } else if (value.intValue !== undefined && value.intValue !== null) {
-      result[key] = typeof value.intValue === 'string' ? parseInt(value.intValue, 10) : Number(value.intValue);
+      result[key] =
+        typeof value.intValue === 'string'
+          ? parseInt(value.intValue, 10)
+          : Number(value.intValue);
     } else if (value.doubleValue !== undefined && value.doubleValue !== null) {
       result[key] = value.doubleValue;
     } else if (value.boolValue !== undefined && value.boolValue !== null) {
       result[key] = value.boolValue;
     } else if (value.arrayValue && value.arrayValue.values) {
       // Recursively convert array values
-      result[key] = value.arrayValue.values.map((v: any) => {
+      result[key] = value.arrayValue.values.map((v: IKeyValue['value']) => {
+        if (!v) return null;
         if (v.stringValue !== undefined) return v.stringValue;
-        if (v.intValue !== undefined) return typeof v.intValue === 'string' ? parseInt(v.intValue, 10) : Number(v.intValue);
+        if (v.intValue !== undefined)
+          return typeof v.intValue === 'string'
+            ? parseInt(v.intValue, 10)
+            : Number(v.intValue);
         if (v.doubleValue !== undefined) return v.doubleValue;
         if (v.boolValue !== undefined) return v.boolValue;
         return null;
@@ -59,18 +122,20 @@ export function extractSpans(request: IExportTraceServiceRequest): ISpan[] {
   if (!request.resourceSpans) return [];
 
   return request.resourceSpans.flatMap((resourceSpan) =>
-    resourceSpan.scopeSpans.flatMap((scopeSpan) => scopeSpan.spans || [])
+    resourceSpan.scopeSpans.flatMap((scopeSpan) => scopeSpan.spans || []),
   );
 }
 
 /**
  * Parse spans from binary protobuf format (application/x-protobuf)
  */
-export function parseProtobufBinary(requestBinary: Uint8Array): IExportTraceServiceRequest {
+export function parseProtobufBinary(
+  requestBinary: Uint8Array,
+): IExportTraceServiceRequest {
   // Get the ExportTraceServiceRequest type from the generated root
   // Cast to any because the protobuf types are dynamically generated
-  const ExportTraceServiceRequest =
-    (root as any).opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+  const ExportTraceServiceRequest = (root as any).opentelemetry.proto.collector
+    .trace.v1.ExportTraceServiceRequest;
 
   // Decode the binary data
   const message = ExportTraceServiceRequest.decode(requestBinary);
@@ -91,7 +156,7 @@ export function parseProtobufBinary(requestBinary: Uint8Array): IExportTraceServ
  * Parse spans from JSON format (application/json)
  * Follows OTLP/HTTP JSON encoding: https://opentelemetry.io/docs/specs/otlp/#otlphttp
  */
-export function parseProtobufJson(json: any): IExportTraceServiceRequest {
+export function parseProtobufJson(json: unknown): IExportTraceServiceRequest {
   // JSON format is already in the correct structure for OTLP
   // Just need to ensure it matches the interface
   return json as IExportTraceServiceRequest;
@@ -110,8 +175,8 @@ export function isJsonContentType(contentType: string | undefined): boolean {
  * This is the main function to use in createTestServer
  */
 export function parseOtelTraces(
-  data: Uint8Array | any,
-  contentType: string | undefined
+  data: Uint8Array | unknown,
+  contentType: string | undefined,
 ): {
   traceRequest: IExportTraceServiceRequest;
   spans: ISpan[];
@@ -141,22 +206,31 @@ export function parseOtelTraces(
 /**
  * Convert span to a simplified, loggable format
  */
-export function spanToSimpleFormat(span: ISpan): any {
+export function spanToSimpleFormat(span: ISpan): SimpleSpan {
   const attributes = keyValueArrayToObject(span.attributes);
 
   // Helper to convert trace/span IDs to hex
-  const traceIdHex = typeof span.traceId === 'string' ? span.traceId : toHex(span.traceId);
-  const spanIdHex = typeof span.spanId === 'string' ? span.spanId : toHex(span.spanId);
+  const traceIdHex =
+    typeof span.traceId === 'string' ? span.traceId : toHex(span.traceId);
+  const spanIdHex =
+    typeof span.spanId === 'string' ? span.spanId : toHex(span.spanId);
   const parentSpanIdHex =
-    span.parentSpanId && (typeof span.parentSpanId === 'string' || span.parentSpanId.length > 0)
+    span.parentSpanId &&
+    (typeof span.parentSpanId === 'string' || span.parentSpanId.length > 0)
       ? typeof span.parentSpanId === 'string'
         ? span.parentSpanId
         : toHex(span.parentSpanId)
       : null;
 
   // Handle Fixed64 types (can be string, number, or Long)
-  const startTime = typeof span.startTimeUnixNano === 'string' ? span.startTimeUnixNano : String(span.startTimeUnixNano);
-  const endTime = typeof span.endTimeUnixNano === 'string' ? span.endTimeUnixNano : String(span.endTimeUnixNano);
+  const startTime =
+    typeof span.startTimeUnixNano === 'string'
+      ? span.startTimeUnixNano
+      : String(span.startTimeUnixNano);
+  const endTime =
+    typeof span.endTimeUnixNano === 'string'
+      ? span.endTimeUnixNano
+      : String(span.endTimeUnixNano);
 
   return {
     traceId: traceIdHex,
@@ -178,30 +252,54 @@ export function spanToSimpleFormat(span: ISpan): any {
 /**
  * Extract relevant AI/LLM attributes from spans
  */
-export function extractAIAttributes(spans: ISpan[]): any[] {
+export function extractAIAttributes(spans: ISpan[]): AIAttributes[] {
   return spans.map((span) => {
     const attributes = keyValueArrayToObject(span.attributes);
-    const spanIdHex = typeof span.spanId === 'string' ? span.spanId : toHex(span.spanId);
+    const spanIdHex =
+      typeof span.spanId === 'string' ? span.spanId : toHex(span.spanId);
+
+    // Helper to safely cast attribute values to strings
+    const asString = (value: OtelValue | undefined): string | undefined => {
+      if (typeof value === 'string') return value;
+      if (value === null || value === undefined) return undefined;
+      return String(value);
+    };
+
+    // Helper to safely cast attribute values to numbers
+    const asNumber = (value: OtelValue | undefined): number | undefined => {
+      if (typeof value === 'number') return value;
+      if (value === null || value === undefined) return undefined;
+      const num = Number(value);
+      return isNaN(num) ? undefined : num;
+    };
 
     return {
       spanId: spanIdHex,
       name: span.name,
       // AI SDK attributes (Vercel AI SDK)
-      operationId: attributes['ai.operationId'],
-      prompt: attributes['ai.prompt'],
-      responseText: attributes['ai.response.text'],
-      toolCallName: attributes['ai.toolCall.name'],
-      toolCallInput: attributes['ai.toolCall.input'],
-      toolCallOutput: attributes['ai.toolCall.output'],
+      operationId: asString(attributes['ai.operationId']),
+      prompt: asString(attributes['ai.prompt']),
+      responseText: asString(attributes['ai.response.text']),
+      toolCallName: asString(attributes['ai.toolCall.name']),
+      toolCallInput: asString(attributes['ai.toolCall.input']),
+      toolCallOutput: asString(attributes['ai.toolCall.output']),
       // GenAI semantic conventions (OpenAI, Anthropic, etc.)
-      genAiSystem: attributes['gen_ai.system'],
-      model: attributes['gen_ai.response.model'],
-      inputTokens: attributes['gen_ai.usage.input_tokens'] || attributes['gen_ai.usage.prompt_tokens'],
-      outputTokens: attributes['gen_ai.usage.output_tokens'] || attributes['gen_ai.usage.completion_tokens'],
+      genAiSystem: asString(attributes['gen_ai.system']),
+      model: asString(attributes['gen_ai.response.model']),
+      inputTokens:
+        asNumber(attributes['gen_ai.usage.input_tokens']) ||
+        asNumber(attributes['gen_ai.usage.prompt_tokens']),
+      outputTokens:
+        asNumber(attributes['gen_ai.usage.output_tokens']) ||
+        asNumber(attributes['gen_ai.usage.completion_tokens']),
       // Legacy Traceloop attributes
-      convoId: attributes['traceloop.association.properties.convo_id'],
-      eventId: attributes['traceloop.association.properties.event_id'],
-      spanKind: attributes['traceloop.span.kind'],
+      convoId: asString(
+        attributes['traceloop.association.properties.convo_id'],
+      ),
+      eventId: asString(
+        attributes['traceloop.association.properties.event_id'],
+      ),
+      spanKind: asString(attributes['traceloop.span.kind']),
     };
   });
 }

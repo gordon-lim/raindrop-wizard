@@ -24,6 +24,32 @@ type Args = {
   apiKey?: string;
 };
 
+async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
+  const choice = await abortIfCancelled(
+    clack.select({
+      message: 'Which setup would you like?',
+      options: [
+        {
+          value: 'otel',
+          label: "Vercel AI SDK' OTel integration",
+          hint: 'no attachments, no custom properties',
+        },
+        {
+          value: 'typescript',
+          label: 'raindrop.ai Typescript SDK',
+          hint: 'attachments, custom properties',
+        },
+      ],
+    }),
+  );
+
+  if (choice === 'otel') {
+    await runVercelAiSdkWizard(wizardOptions);
+  } else {
+    await runTypescriptWizard(wizardOptions);
+  }
+}
+
 export async function runWizard(argv: Args) {
   const finalArgs = {
     ...argv,
@@ -63,29 +89,7 @@ export async function runWizard(argv: Args) {
         await runTypescriptWizard(wizardOptions);
         break;
       case Integration.vercelAiSdk:
-        const trackingChoice = await abortIfCancelled(
-          clack.select({
-            message: 'Which setup would you like?',
-            options: [
-              {
-                value: 'auto',
-                label: 'Vercel AI SDK\' OTel integration',
-                hint: 'no attachments, no custom properties',
-              },
-              {
-                value: 'manual',
-                label: 'raindrop.ai Typescript SDK',
-                hint: 'attachments, custom properties',
-              },
-            ],
-          }),
-        );
-
-        if (trackingChoice === 'auto') {
-          await runVercelAiSdkWizard(wizardOptions);
-        } else {
-          await runTypescriptWizard(wizardOptions);
-        }
+        await handleVercelAiSdkSetup(wizardOptions);
         break;
       default:
         clack.log.error('No setup wizard selected!');
@@ -99,7 +103,7 @@ export async function runWizard(argv: Args) {
         docsUrl,
       )} to set up raindrop.ai manually.`,
     );
-    clack.log.error("error: " + error);
+    clack.log.error(`error: ${String(error)}`);
     process.exit(1);
   }
 }

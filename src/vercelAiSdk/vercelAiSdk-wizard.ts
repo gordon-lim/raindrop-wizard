@@ -1,5 +1,6 @@
 import type { WizardOptions } from '../utils/types';
 import type { FrameworkConfig } from '../lib/framework-config';
+import type { PackageJson } from '../utils/package-json-types';
 import { enableDebugLogs } from '../utils/debug';
 import { runAgentWizard } from '../lib/agent-runner';
 import { Integration } from '../lib/constants';
@@ -20,14 +21,40 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
   },
 
   detection: {
-    getVersion: (packageJson: any) =>
+    getVersion: (packageJson: PackageJson) =>
       getPackageVersion('raindrop-ai', packageJson),
   },
 
   prompts: {
-    getDocumentation: async (context) => {
+    getDocumentation: async () => {
       try {
-        const otelPlatform = context?.otelPlatform || '';
+        // Ask about OTEL platform
+        const otelPlatform = await clack.select({
+          message: 'How do you want OpenTelemetry setup?',
+          options: [
+            {
+              value: 'next',
+              label: 'Next.js',
+            },
+            {
+              value: 'node',
+              label: 'Node.js',
+            },
+            {
+              value: 'cloudflare',
+              label: 'Cloudflare Workers',
+            },
+            {
+              value: 'sentry',
+              label: 'Sentry (Next.js)',
+            },
+          ],
+        });
+
+        if (clack.isCancel(otelPlatform)) {
+          abort('Setup cancelled', 0);
+        }
+
         // __dirname in compiled code is dist/src/vercelAiSdk/, so go up to project root then to src/vercelAiSdk/
         const baseDocsPath = path.resolve(
           __dirname,
@@ -84,34 +111,5 @@ export async function runVercelAiSdkWizard(
     enableDebugLogs();
   }
 
-  // Ask about OTEL platform
-  const otelPlatform = await clack.select({
-    message: 'How do you want OpenTelemetry setup?',
-    options: [
-      {
-        value: 'next',
-        label: 'Next.js',
-      },
-      {
-        value: 'node',
-        label: 'Node.js',
-      },
-      {
-        value: 'cloudflare',
-        label: 'Cloudflare Workers',
-      },
-      {
-        value: 'sentry',
-        label: 'Sentry (Next.js)',
-      },
-    ],
-  });
-
-  if (clack.isCancel(otelPlatform)) {
-    abort('Setup cancelled', 0);
-  }
-
-  await runAgentWizard(VERCEL_AI_SDK_AGENT_CONFIG, options, {
-    otelPlatform: otelPlatform as string,
-  });
+  await runAgentWizard(VERCEL_AI_SDK_AGENT_CONFIG, options);
 }

@@ -1,16 +1,14 @@
 import * as childProcess from 'node:child_process';
-import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import * as path from 'node:path';
 
 import chalk from 'chalk';
-import { traceStep } from '../telemetry';
 import type { WizardOptions } from './types';
 import type { Integration } from '../lib/constants';
 import clack from './clack';
 import { INTEGRATION_CONFIG } from '../lib/config';
-import type { OAuthTokenResponse, OAuthUserInfo } from './oauth';
+import type { OAuthTokenResponse } from './oauth';
 import { getUserInfo, performOAuthFlow } from './oauth';
+import { debug } from './debug';
 
 export function abort(message?: string, status?: number): never {
   clack.outro(message ?? 'Wizard setup cancelled.');
@@ -33,7 +31,8 @@ export async function abortIfCancelled<T>(
       : 'https://raindrop.com/docs';
 
     clack.cancel(
-      `Wizard setup cancelled. You can read the documentation for ${integration ?? 'Raindrop'
+      `Wizard setup cancelled. You can read the documentation for ${
+        integration ?? 'Raindrop'
       } at ${chalk.cyan(docsUrl)} to continue with the setup manually.`,
     );
     process.exit(0);
@@ -60,44 +59,42 @@ export function printWelcome(options: {
 export async function confirmContinueIfNoOrDirtyGitRepo(
   options: Pick<WizardOptions, 'default'>,
 ): Promise<void> {
-  return traceStep('check-git-status', async () => {
-    if (!isInGitRepo()) {
-      const continueWithoutGit = options.default
-        ? true
-        : await abortIfCancelled(
+  if (!isInGitRepo()) {
+    const continueWithoutGit = options.default
+      ? true
+      : await abortIfCancelled(
           clack.confirm({
             message:
               'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
           }),
         );
 
-      if (!continueWithoutGit) {
-        abort(undefined, 0);
-      }
-      // return early to avoid checking for uncommitted files
-      return;
+    if (!continueWithoutGit) {
+      abort(undefined, 0);
     }
+    // return early to avoid checking for uncommitted files
+    return;
+  }
 
-    const uncommittedOrUntrackedFiles = getUncommittedOrUntrackedFiles();
-    if (uncommittedOrUntrackedFiles.length) {
-      clack.log.warn(
-        `You have uncommitted or untracked files in your repo:
+  const uncommittedOrUntrackedFiles = getUncommittedOrUntrackedFiles();
+  if (uncommittedOrUntrackedFiles.length) {
+    clack.log.warn(
+      `You have uncommitted or untracked files in your repo:
 
 ${uncommittedOrUntrackedFiles.join('\n')}
 
 The wizard will create and update files.`,
-      );
-      const continueWithDirtyRepo = await abortIfCancelled(
-        clack.confirm({
-          message: 'Do you want to continue anyway?',
-        }),
-      );
+    );
+    const continueWithDirtyRepo = await abortIfCancelled(
+      clack.confirm({
+        message: 'Do you want to continue anyway?',
+      }),
+    );
 
-      if (!continueWithDirtyRepo) {
-        abort(undefined, 0);
-      }
+    if (!continueWithDirtyRepo) {
+      abort(undefined, 0);
     }
-  });
+  }
 }
 
 export function isInGitRepo() {
@@ -106,7 +103,13 @@ export function isInGitRepo() {
       stdio: 'ignore',
     });
     return true;
-  } catch {
+  } catch (error) {
+    // Not in a git repo - this is expected in some cases
+    debug(
+      `Not in git repository: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return false;
   }
 }
@@ -127,16 +130,21 @@ export function getUncommittedOrUntrackedFiles(): string[] {
       .map((f) => `- ${f.split(/\s+/)[1]}`);
 
     return files;
-  } catch {
+  } catch (error) {
+    // Error running git status - likely not in a git repo or git not available
+    debug(
+      `Failed to get git status: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return [];
   }
 }
 
 export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
-  return await traceStep('ask-for-ai-consent', async () => {
-    const aiConsent = options.default
-      ? true
-      : await abortIfCancelled(
+  const aiConsent = options.default
+    ? true
+    : await abortIfCancelled(
         clack.select({
           message: 'This setup wizard uses AI, are you happy to continue? ✨',
           options: [
@@ -155,8 +163,7 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
         }),
       );
 
-    return aiConsent;
-  });
+  return aiConsent;
 }
 
 export async function askForWizardLogin(options: {
@@ -183,9 +190,8 @@ export async function askForWizardLogin(options: {
       'No project access granted. Please authorize with project-level access.',
     );
     clack.log.error(error.message);
-    await abort();
+    abort();
   }
-
 
   clack.log.success(
     `Login complete. ${options.signup ? 'Welcome to Raindrop! 🎉' : ''}`,
