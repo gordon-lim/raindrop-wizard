@@ -36,9 +36,6 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
         );
         let baseDocs = await fs.promises.readFile(baseDocsPath, 'utf-8');
 
-        // Template replacement
-        baseDocs = baseDocs.replace(/\{\{TEST_URL\}\}/g, TEST_URL);
-
         // If no otel provider, just return base docs
         if (!otelProvider) {
           return baseDocs;
