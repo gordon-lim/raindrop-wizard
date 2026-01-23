@@ -52,7 +52,7 @@ export function printWelcome(options: {
 
   const welcomeText =
     options.message ||
-    `The ${options.wizardName} will help you set up Raindrop for your Agent application.\nThank you for using Raindrop :)`;
+    `The ${options.wizardName} will help you set up Raindrop for your AI application.\nThank you for using Raindrop :)`;
 
   clack.note(welcomeText);
 }

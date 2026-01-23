@@ -45,7 +45,7 @@ const PYTHON_AGENT_CONFIG: FrameworkConfig = {
       'Set up environment variables for configuration',
     ],
     getOutroNextSteps: () => [
-      'Configure your API key in environment variables',
+      'Configure your API key in environment variables for deployment',
       'Start using raindrop.ai in your Python application',
     ],
   },

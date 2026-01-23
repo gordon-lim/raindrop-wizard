@@ -69,21 +69,14 @@ integrate raindrop.ai. ${docsSection}
 
 ## Testing & Verification
 
-After completing the integration:
+After completing the integration, the wizard will test it automatically.
 
-1. Signal test readiness: Output exactly "[START_INTEGRATION_TEST]" on its own line
-2. Wait for test results containing:
-   - Raw event data (JSON or OTEL format)
-   - User feedback message
-3. Analyze BOTH the data and user's comments:
-   - Check if events/traces are being received
-   - Verify required fields (model, input, output, tokens, etc.)
-   - Consider user's observations
-4. Based on analysis:
-   - SUCCESS: User confirms + valid events → Report completion
-   - ISSUES FOUND: Fix code and output "[START_INTEGRATION_TEST]" again
-   - NO EVENTS: Debug endpoint/configuration and retry
-5. Maximum 3 test attempts - after that, report issues and request user help`;
+If issues are found:
+1. Analyze the test results and user feedback
+2. Fix the code to address the issues
+3. The wizard will automatically test again after you're done
+
+Maximum 3 test attempts will be allowed.`;
 }
 
 /**
@@ -97,17 +90,17 @@ export function buildTestFeedbackMessage(
   const eventSummary =
     events.length > 0
       ? events
-          .map((event, idx) => {
-            const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
-            const spanCount = event.data.spans?.length || 0;
-            const aiAttrs = event.data.aiAttributes || event.data;
+        .map((event, idx) => {
+          const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
+          const spanCount = event.data.spans?.length || 0;
+          const aiAttrs = event.data.aiAttributes || event.data;
 
-            return `Event #${idx + 1} at ${event.url}:
+          return `Event #${idx + 1} at ${event.url}:
 Format: ${format}
 ${spanCount > 0 ? `Spans: ${spanCount}` : ''}
 Data: ${JSON.stringify(aiAttrs, null, 2)}`;
-          })
-          .join('\n\n')
+        })
+        .join('\n\n')
       : 'No events received.';
 
   return `# Integration Test Results (Attempt ${attemptNumber})
@@ -122,10 +115,11 @@ ${eventSummary}
 
 ## Your Task
 
-Analyze the events and user feedback:
-- If user confirms success ("looks good") AND events are valid → Report completion
-- If user reports issues OR events are missing/malformed → Fix code and signal [START_INTEGRATION_TEST] to retest
-- If no events received → Debug endpoint configuration and retest
+Analyze the events and user feedback, then fix the code to address any issues:
+1. Review the event data structure and user's comments
+2. Identify what's missing or incorrect
+3. Update the integration code to fix the problems
+4. The wizard will automatically retest after your fixes
 
 You have ${3 - attemptNumber} attempt(s) remaining.`;
 }

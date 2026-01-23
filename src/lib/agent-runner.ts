@@ -21,7 +21,7 @@ import chalk from 'chalk';
 import { askForWizardLogin } from '../utils/clack-utils';
 import { getUserApiKey } from '../utils/oauth';
 import axios from 'axios';
-import { API_BASE_URL, TEST_PORT, TEST_URL } from './constants';
+import { API_BASE_URL, TEST_PORT, TEST_URL, Integration } from './constants';
 import http from 'http';
 import { parseOtelTraces, spanToSimpleFormat, extractAIAttributes } from './otel-parser';
 
@@ -30,13 +30,10 @@ import { parseOtelTraces, spanToSimpleFormat, extractAIAttributes } from './otel
  */
 function createTestServer(): {
   server: http.Server;
-  getEvent: () => Promise<any>;
   getReceivedEvents: () => any[];
   close: () => void;
 } {
   const eventsReceived: any[] = [];
-  let eventResolver: ((value: any) => void) | null = null;
-  let completedEvent: any = null;
 
   const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
@@ -64,9 +61,6 @@ function createTestServer(): {
             bodyForLogging = body;
             event = parsedJson;
 
-            clack.log.info(
-              chalk.cyan('Parsed as raindrop.ai JSON event')
-            );
           } else {
             // Binary protobuf = OTEL format
             try {
@@ -80,9 +74,6 @@ function createTestServer(): {
                 aiAttributes: extractAIAttributes(spans),
               };
 
-              clack.log.info(
-                chalk.cyan('Parsed as OTEL protobuf')
-              );
             } catch (protobufError) {
               // If protobuf parsing fails, store raw buffer
               bodyForLogging = `[Binary data, ${buffer.length} bytes - failed to parse as OTEL protobuf]`;
@@ -96,71 +87,49 @@ function createTestServer(): {
             }
           }
 
-          clack.log.info(
-            chalk.cyan('HTTP request received:') +
-            '\n' +
-            chalk.dim(`Method: ${req.method}`) +
-            '\n' +
-            chalk.dim(`URL: ${req.url}`) +
-            '\n' +
-            chalk.dim(`Content-Type: ${contentType}`) +
-            '\n' +
-            chalk.dim(`Headers: ${JSON.stringify(req.headers, null, 2)}`) +
-            '\n' +
-            chalk.dim(`Raw body: ${bodyForLogging}`)
-          );
-
-          // Handle completion based on event type:
-          // - JSON events: Add to list, complete when is_pending === false
-          // - OTEL protobuf: Only add if has spans, complete immediately
+          // Handle different event types - never auto-complete, always wait for user keypress
           const isOtelTrace = event.format === 'otel';
           const isJsonEvent = !isOtelTrace;
 
           if (isJsonEvent) {
             // JSON event format: always add to list
-            eventsReceived.push(event);
+            eventsReceived.push({ url: req.url || '/', data: event });
 
-            // Check if this is the completion event
+            // Check if this is a completion event (for display only, don't auto-complete)
             const isComplete = event.is_pending === false || event.is_pending === 'false';
 
-            if (isComplete) {
-              completedEvent = event;
-              clack.log.success(
-                chalk.green(`Completion event received (is_pending=false). Test complete!`)
-              );
-
-              // Resolve the promise if someone is waiting
-              if (eventResolver) {
-                eventResolver(eventsReceived);
-                eventResolver = null;
-              }
-            } else {
-              clack.log.info(
-                chalk.yellow(`Event received with is_pending=${event.is_pending}. Waiting for completion event...`)
-              );
-            }
+            clack.log.info(
+              chalk.cyan(`\n━━━ Event at ${req.url} ━━━`) +
+              '\n' +
+              chalk.dim(JSON.stringify(event, null, 2)) +
+              '\n' +
+              (isComplete
+                ? chalk.green(`Completion event (is_pending=false)`)
+                : chalk.green(`Partial event (is_pending=true)`)) +
+              '\n' +
+              chalk.yellow(`Continue interacting or press any key to talk to the agent...`)
+            );
           } else {
             // OTEL protobuf format
             const hasSpans = event.spans && event.spans.length > 0;
 
             if (hasSpans) {
-              // Has spans: add to list and complete immediately
-              eventsReceived.push(event);
-              completedEvent = event;
+              // Has spans: add to list
+              eventsReceived.push({ url: req.url || '/', data: event });
 
-              clack.log.success(
-                chalk.green(`OTEL trace received with ${event.spans.length} span(s). Test complete!`)
+              clack.log.info(
+                chalk.cyan(`\n━━━ OTEL Trace at ${req.url} ━━━`) +
+                '\n' +
+                chalk.dim(JSON.stringify(event, null, 2)) +
+                '\n' +
+                chalk.green(`✓ ${event.spans.length} span(s)`) +
+                '\n' +
+                chalk.yellow(`Continue interacting or press any key to talk to the agent...`)
               );
-
-              // Resolve the promise if someone is waiting
-              if (eventResolver) {
-                eventResolver(eventsReceived);
-                eventResolver = null;
-              }
             } else {
               // Empty OTEL trace: ignore and continue listening
               clack.log.info(
-                chalk.dim(`OTEL trace with 0 spans received - ignoring and continuing to listen...`)
+                chalk.dim(`OTEL trace with 0 spans at ${req.url} - ignoring`)
               );
             }
           }
@@ -192,33 +161,16 @@ function createTestServer(): {
 
   return {
     server,
-    getEvent: () => {
-      // If completed event already received, return all events immediately
-      if (completedEvent) {
-        return Promise.resolve(eventsReceived);
-      }
-
-      // Otherwise, wait for completion event
-      return new Promise((resolve) => {
-        eventResolver = resolve;
-      });
-    },
     getReceivedEvents: () => {
-      // Return all events received so far, even if no completion event yet
       return eventsReceived;
     },
     close: () => {
-      return new Promise<void>((resolve, reject) => {
-        server.close((err) => {
-          if (err) {
-            logToFile('Error closing test server:', err);
-            // Resolve anyway to not block cleanup
-            resolve();
-          } else {
-            logToFile('Test server closed successfully');
-            resolve();
-          }
-        });
+      server.close((err) => {
+        if (err) {
+          logToFile('Error closing test server:', err);
+        } else {
+          logToFile('Test server closed successfully');
+        }
       });
     },
   };
@@ -233,8 +185,9 @@ async function testIntegration(
   config: FrameworkConfig,
   options: WizardOptions,
   spinner: any,
-): Promise<void> {
-  const { server, getEvent, close, getReceivedEvents } = createTestServer();
+  attemptNumber: number,
+): Promise<{ sessionId?: string; shouldRetry: boolean }> {
+  const { server, close, getReceivedEvents } = createTestServer();
 
   try {
     // Start the server
@@ -247,54 +200,59 @@ async function testIntegration(
     });
 
     clack.log.step(
-      chalk.cyan('\nTest your integration:') +
+      chalk.cyan(`\nTest your integration (Attempt ${attemptNumber}):`) +
       '\n' +
       chalk.dim(`Interact with your AI.`) +
       '\n' +
-      chalk.dim('Listening for interactions on the test server...') +
+      chalk.dim('Events will appear below as they arrive...') +
       '\n' +
-      chalk.dim('Press any key to continue without waiting...'),
+      chalk.yellow('Press any key when done testing...'),
     );
 
-    // Wait for either an event or user keypress
-    const eventPromise = getEvent();
-    const keyPressPromise = waitForUserKeyPress();
+    // Wait for user to finish testing
+    await waitForUserKeyPress();
 
-    const result = await Promise.race([
-      eventPromise.then((events) => ({ type: 'event' as const, events })),
-      keyPressPromise.then(() => ({ type: 'keypress' as const })),
-    ]);
+    // Get all received events
+    const receivedEvents = getReceivedEvents();
 
-    // Check if event was received
-    let eventData: any = null;
-    if (result.type === 'event') {
-      eventData = result.events;
-    } else {
-      // If user pressed key, check if any pending events were received
-      const receivedEvents = getReceivedEvents();
-      if (receivedEvents.length > 0) {
-        eventData = receivedEvents;
-        clack.log.warn(
-          chalk.yellow(`\nReceived ${receivedEvents.length} event(s) but no completion event (is_pending=false) yet.`)
-        );
-      }
+    // Ask if results look good
+    const resultsGood = await clack.select({
+      message: `Test attempt ${attemptNumber}: Do the results look good?`,
+      options: [
+        { value: true, label: 'Yes, looks good - proceed' },
+        { value: false, label: 'No, I need to provide feedback' },
+      ],
+    });
+
+    if (resultsGood) {
+      // User is satisfied
+      clack.log.success('Integration test passed!');
+      return { sessionId, shouldRetry: false };
     }
 
+    // User wants to provide feedback
+    const userFeedback = await clack.text({
+      message: 'Provide feedback on the issues:',
+      placeholder: 'e.g., "user_id is missing" or "wrong endpoint"',
+    });
+
     // Build feedback for agent
-    const feedback = buildFeedbackPrompt(eventData, TEST_URL);
+    const feedback = buildFeedbackPrompt(receivedEvents, userFeedback as string, TEST_URL);
 
     // Run agent with feedback, resuming the previous session if we have a session ID
     if (sessionId) {
-      await runAgent(agentConfig, feedback, options, spinner, {
-        spinnerMessage: 'Analyzing integration test results...',
-        successMessage: 'Integration verification complete',
-        errorMessage: 'Failed to analyze integration results',
+      const newSessionId = await runAgent(agentConfig, feedback, options, spinner, {
+        spinnerMessage: `Analyzing feedback and fixing issues (attempt ${attemptNumber})...`,
+        successMessage: `Agent completed fixes (attempt ${attemptNumber})`,
+        errorMessage: 'Failed to process feedback',
         resume: sessionId,
       });
+      return { sessionId: newSessionId, shouldRetry: true };
     } else {
       clack.log.warn(
-        chalk.yellow('No session ID available, skipping agent analysis'),
+        chalk.yellow('No session ID available, cannot continue testing'),
       );
+      return { sessionId: undefined, shouldRetry: false };
     }
   } finally {
     // Clean up server
@@ -379,17 +337,16 @@ export async function runAgentWizard(
     options,
   );
 
-  // const sessionId = await runAgent(agent, integrationPrompt, options, spinner, {
-  //   estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
-  //   spinnerMessage: SPINNER_MESSAGE,
-  //   successMessage: config.ui.successMessage,
-  //   errorMessage: 'Integration failed',
-  // });
-
-
-  const sessionId = '123';
   // Use try-finally to ensure cleanup always runs, even if setup or test fails
   try {
+    // Run agent to do the integration
+    const sessionId = await runAgent(agent, integrationPrompt, options, spinner, {
+      estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
+      spinnerMessage: SPINNER_MESSAGE,
+      successMessage: config.ui.successMessage,
+      errorMessage: 'Integration failed',
+    });
+
     // Run setup function if provided (e.g., add test endpoint)
     if (config.setup) {
       spinner.start('Configuring test environment...');
@@ -403,8 +360,36 @@ export async function runAgentWizard(
       }
     }
 
-    // Test the integration with agent feedback loop
-    await testIntegration(agent, sessionId, config, options, spinner);
+    // Test loop: continue until user says it's good or max attempts
+    // TODO: Enable test integration for vercelaisdk once implemented
+    if (config.metadata.integration !== Integration.vercelAiSdk) {
+      let currentSessionId = sessionId;
+      let attemptNumber = 0;
+      let shouldContinue = true;
+      const MAX_ATTEMPTS = 3;
+
+      while (shouldContinue && attemptNumber < MAX_ATTEMPTS) {
+        attemptNumber++;
+
+        const result = await testIntegration(
+          agent,
+          currentSessionId,
+          config,
+          options,
+          spinner,
+          attemptNumber,
+        );
+
+        currentSessionId = result.sessionId;
+        shouldContinue = result.shouldRetry;
+      }
+
+      if (attemptNumber >= MAX_ATTEMPTS && shouldContinue) {
+        clack.log.warn(
+          chalk.yellow('Maximum test attempts (3) reached. Proceeding with current state.'),
+        );
+      }
+    }
   } finally {
     // Run cleanup function if provided - this ALWAYS runs
     if (config.cleanup) {
@@ -507,15 +492,10 @@ Focus on files where OpenAI API calls are made - these are the files that need t
 }
 
 /**
- * Build feedback prompt for the agent based on test results
+ * Build feedback prompt for the agent based on test results and user feedback
  */
-function buildFeedbackPrompt(eventData: any, testUrl: string): string {
-  if (eventData) {
-    clack.log.success(
-      chalk.green('\nEvent received!') +
-      '\n' +
-      chalk.dim(JSON.stringify(eventData, null, 2)),
-    );
+function buildFeedbackPrompt(eventData: any, userFeedback: string, testUrl: string): string {
+  if (eventData && eventData.length > 0) {
 
     // Check if eventData is an array (multiple events) or a single event
     const events = Array.isArray(eventData) ? eventData : [eventData];
@@ -525,10 +505,10 @@ function buildFeedbackPrompt(eventData: any, testUrl: string): string {
 
     if (isOtelFormat) {
       // Handle OTLP protobuf trace verification (spans)
-      return buildOtelTraceFeedbackPrompt(events, testUrl);
+      return buildOtelTraceFeedbackPrompt(events, userFeedback, testUrl);
     } else {
       // Handle JSON raindrop.ai event verification
-      return buildJsonEventFeedbackPrompt(events, testUrl);
+      return buildJsonEventFeedbackPrompt(events, userFeedback, testUrl);
     }
   } else {
     clack.log.warn(
@@ -546,6 +526,8 @@ This suggests the integration is not working correctly. Please troubleshoot:
 4. Look for any error messages in the code or configuration
 5. Ensure the app is actually making OpenAI API calls during the test
 
+User feedback: ${userFeedback}
+
 Fix any issues found and explain what was wrong.`;
   }
 }
@@ -553,7 +535,7 @@ Fix any issues found and explain what was wrong.`;
 /**
  * Build feedback prompt for OTLP protobuf traces (spans)
  */
-function buildOtelTraceFeedbackPrompt(events: any[], testUrl: string): string {
+function buildOtelTraceFeedbackPrompt(events: any[], userFeedback: string, testUrl: string): string {
   const issues: string[] = [];
   const warnings: string[] = [];
 
@@ -626,13 +608,16 @@ The integration may need adjustments to properly capture AI/LLM telemetry data.`
 4. Look for any errors in the application logs`;
   }
 
+  // Add user feedback
+  verificationMessage += `\n\nUser feedback: ${userFeedback}`;
+
   return verificationMessage;
 }
 
 /**
  * Build feedback prompt for JSON raindrop.ai events
  */
-function buildJsonEventFeedbackPrompt(events: any[], testUrl: string): string {
+function buildJsonEventFeedbackPrompt(events: any[], userFeedback: string, testUrl: string): string {
   // Verify required fields
   const requiredFields = ['input', 'output', 'model', 'convo_id', 'event_id', 'user_id'];
   const missingFields: string[] = [];
@@ -688,7 +673,9 @@ Please verify:`;
 
 ${missingFields.length > 0 || fieldIssues.length > 0
       ? 'Please fix the integration code to ensure all required fields are present and interaction.finish() is properly called.'
-      : 'If everything looks correct, respond with a brief confirmation.'}`;
+      : 'If everything looks correct, respond with a brief confirmation.'}
+
+User feedback: ${userFeedback}`;
 
   return verificationMessage;
 }

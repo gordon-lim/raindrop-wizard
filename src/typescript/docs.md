@@ -115,29 +115,6 @@ const nextConfig = {
 module.exports = nextConfig
 ```
 
-### Explicit Module Instrumentation
-
-In some environments, automatic instrumentation of AI libraries may not work correctly due to module loading order or bundler behavior. You can use the `instrumentModules` option to explicitly specify which modules to instrument.
-
-**Important for Anthropic users:** You must use a module namespace import (`import * as ...`) for Anthropic, not the default export.
-
-```typescript
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import * as AnthropicModule from "@anthropic-ai/sdk";  // Module namespace import required!
-import { Raindrop } from "raindrop-ai";
-
-const raindrop = new Raindrop({
-  writeKey: process.env.RAINDROP_WRITE_KEY,
-  instrumentModules: {
-    openAI: OpenAI,
-    anthropic: AnthropicModule,  // Pass the module namespace, NOT the default export
-  },
-});
-```
-
-Supported modules include: `openAI`, `anthropic`, `cohere`, `bedrock`, `google_vertexai`, `google_aiplatform`, `pinecone`, `together`, `langchain`, `llamaIndex`, `chromadb`, and `qdrant`.
-
 ## Using `withSpan` for Task Tracing
 
 The `withSpan` method allows you to trace specific tasks or operations within your AI application. This is especially useful for tracking LLM requests. Any LLM call within the span will be automatically tracked.
@@ -330,6 +307,31 @@ async function main() {
 
 main();
 ```
+
+## Troubleshooting
+
+### Explicit Module Instrumentation
+
+In some environments, automatic instrumentation of AI libraries may not work correctly due to module loading order or bundler behavior. You can use the `instrumentModules` option to explicitly specify which modules to instrument.
+
+**Important for Anthropic users:** You must use a module namespace import (`import * as ...`) for Anthropic, not the default export.
+
+```typescript
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import * as AnthropicModule from "@anthropic-ai/sdk";  // Module namespace import required!
+import { Raindrop } from "raindrop-ai";
+
+const raindrop = new Raindrop({
+  writeKey: process.env.RAINDROP_WRITE_KEY,
+  instrumentModules: {
+    openAI: OpenAI,
+    anthropic: AnthropicModule,  // Pass the module namespace, NOT the default export
+  },
+});
+```
+
+Supported modules include: `openAI`, `anthropic`, `cohere`, `bedrock`, `google_vertexai`, `google_aiplatform`, `pinecone`, `together`, `langchain`, `llamaIndex`, `chromadb`, and `qdrant`.
 
 ## Additional Resources
 
