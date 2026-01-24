@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import chalk from 'chalk';
 import type { WizardOptions } from './types';
 import type { Integration } from '../lib/constants';
-import clack from './clack';
+import clack from './ui';
 import { INTEGRATION_CONFIG } from '../lib/config';
 import type { OAuthTokenResponse } from './oauth';
 import { getUserInfo, performOAuthFlow } from './oauth';

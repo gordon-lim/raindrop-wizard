@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { appendFileSync } from 'fs';
 import { prepareMessage } from './logging';
-import clack from './clack';
+import clack from './ui';
 
 let debugEnabled = false;
 

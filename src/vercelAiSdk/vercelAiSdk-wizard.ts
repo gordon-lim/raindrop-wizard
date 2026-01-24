@@ -7,7 +7,7 @@ import { Integration } from '../lib/constants';
 import { getPackageVersion } from '../utils/package-json';
 import fs from 'fs';
 import path from 'path';
-import clack from '../utils/clack';
+import clack from '../utils/ui';
 import { abort } from '../utils/clack-utils';
 
 /**

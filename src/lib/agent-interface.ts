@@ -4,7 +4,7 @@
  */
 
 import path from 'path';
-import clack from '../utils/clack';
+import clack from '../utils/ui';
 import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug';
 import type { WizardOptions } from '../utils/types';
 import { LINTING_TOOLS } from './safe-tools';
@@ -32,11 +32,6 @@ function getClaudeCodeExecutablePath(): string {
 // syntax which prettier cannot parse. See PR discussion for details.
 type SDKMessage = any;
 type McpServersConfig = any;
-
-export const AgentSignals = {
-  /** Signal emitted when the agent reports progress to the user */
-  STATUS: '[STATUS]',
-} as const;
 
 export type AgentConfig = {
   workingDirectory: string;
@@ -417,20 +412,6 @@ function handleSDKMessage(
         for (const block of content) {
           if (block.type === 'text' && typeof block.text === 'string') {
             collectedText.push(block.text);
-
-            // Check for [STATUS] markers
-            const statusRegex = new RegExp(
-              `^.*${AgentSignals.STATUS.replace(
-                /[.*+?^${}()|[\]\\]/g,
-                '\\$&',
-              )}\\s*(.+?)$`,
-              'm',
-            );
-            const statusMatch = block.text.match(statusRegex);
-            if (statusMatch) {
-              spinner.stop(statusMatch[1].trim());
-              spinner.start('Integrating raindrop.ai...');
-            }
           }
         }
       }

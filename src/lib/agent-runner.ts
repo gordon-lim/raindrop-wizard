@@ -14,7 +14,7 @@ import {
 import { writeApiKeyToEnv } from '../utils/environment';
 import fs from 'fs';
 import path from 'path';
-import clack from '../utils/clack';
+import clack from '../utils/ui';
 import { initializeAgent, runAgent } from './agent-interface';
 import { logToFile, LOG_FILE_PATH, debug } from '../utils/debug';
 import chalk from 'chalk';
@@ -36,7 +36,7 @@ export async function runAgentWizard(
   printWelcome({ wizardName: getWelcomeMessage(config.metadata.name) });
 
   clack.log.info(
-    `🧙 The wizard has chosen you to try the next-generation agent integration for ${config.metadata.name}.\n\nStand by for the good stuff, and let the robot minders know how it goes:\n\nwizard@raindrop.ai`,
+    `🧙 The wizard has chosen you to try the next-generation agent integration for ${config.metadata.name}.\n\nStand by for the good stuff, and let the robot minders know how it goes: wizard@raindrop.ai\n`,
   );
 
   const aiConsent = await askForAIConsent(options);

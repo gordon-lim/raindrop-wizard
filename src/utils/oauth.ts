@@ -4,7 +4,7 @@ import axios from 'axios';
 import chalk from 'chalk';
 import opn from 'opn';
 import { z } from 'zod';
-import clack from './clack';
+import clack from './ui';
 import {
   API_KEY_ENDPOINT,
   ISSUES_URL,

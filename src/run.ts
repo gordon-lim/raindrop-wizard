@@ -4,7 +4,7 @@ import type { WizardOptions } from './utils/types';
 
 import { getIntegrationDescription, Integration } from './lib/constants';
 import { readEnvironment } from './utils/environment';
-import clack from './utils/clack';
+import clack from './utils/ui';
 import path from 'path';
 import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config';
 import { runPythonWizard } from './python/python-wizard';

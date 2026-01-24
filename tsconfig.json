@@ -7,7 +7,10 @@
     "types": ["node", "jest"],
     "typeRoots": ["./node_modules/@types", "./types"],
     "declaration": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "jsx": "react",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": [
     "__tests__",

@@ -1,6 +1,6 @@
 import http from 'http';
 import chalk from 'chalk';
-import clack from '../utils/clack';
+import clack from '../utils/ui';
 import { logToFile } from '../utils/debug';
 import {
   parseOtelTraces,

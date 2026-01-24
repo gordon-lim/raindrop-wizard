@@ -20,7 +20,7 @@ if (!satisfies(process.version, NODE_VERSION_RANGE)) {
 import type { WizardOptions } from './src/utils/types';
 import { runWizard } from './src/run';
 import { isNonInteractiveEnvironment } from './src/utils/environment';
-import clack from './src/utils/clack';
+import clack from './src/utils/ui';
 
 yargs(hideBin(process.argv))
   .env('RAINDROP')

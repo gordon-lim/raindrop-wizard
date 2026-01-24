@@ -3,7 +3,7 @@ import { Integration } from './constants';
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
-import clack from '../utils/clack';
+import clack from '../utils/ui';
 
 type IntegrationConfig = {
   detect: (options: Pick<WizardOptions, 'installDir'>) => Promise<boolean>;
