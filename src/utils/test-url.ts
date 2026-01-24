@@ -1,6 +1,6 @@
 import { glob } from 'glob';
 import fs from 'fs';
-import { logToFile, debug } from './debug';
+import { logToFile, debug } from './debug.js';
 
 interface InjectorConfig {
   /** File glob pattern (e.g., '**\/*.py' or '**\/*.ts') */

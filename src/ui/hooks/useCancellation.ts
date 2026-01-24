@@ -7,7 +7,7 @@
  */
 
 // Re-export for convenience in components
-export { CANCEL_SYMBOL, isCancel } from '../cancellation';
+export { CANCEL_SYMBOL, isCancel } from '../cancellation.js';
 
 /**
  * Create a cancellation handler hook that uses ink's useInput

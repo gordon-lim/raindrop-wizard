@@ -1,14 +1,17 @@
 import * as childProcess from 'node:child_process';
 import * as os from 'node:os';
 
-import chalk from 'chalk';
-import type { WizardOptions } from './types';
-import type { Integration } from '../lib/constants';
-import clack from './ui';
-import { INTEGRATION_CONFIG } from '../lib/config';
-import type { OAuthTokenResponse } from './oauth';
-import { getUserInfo, performOAuthFlow } from './oauth';
-import { debug } from './debug';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
+import type { WizardOptions } from './types.js';
+import type { Integration } from '../lib/constants.js';
+import clack from './ui.js';
+import { INTEGRATION_CONFIG } from '../lib/config.js';
+import type { OAuthTokenResponse } from './oauth.js';
+import { getUserInfo, performOAuthFlow } from './oauth.js';
+import { debug } from './debug.js';
 
 export function abort(message?: string, status?: number): never {
   clack.outro(message ?? 'Wizard setup cancelled.');

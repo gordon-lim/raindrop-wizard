@@ -1,9 +1,48 @@
-import type {
-  IExportTraceServiceRequest,
-  ISpan,
-} from '@opentelemetry/otlp-transformer/build/esm/trace/internal-types';
-import type { IKeyValue } from '@opentelemetry/otlp-transformer/build/esm/common/internal-types';
-import * as root from '@opentelemetry/otlp-transformer/build/esm/generated/root';
+// Define types locally since internal OTEL types aren't exported properly
+interface IKeyValue {
+  key: string;
+  value?: {
+    stringValue?: string;
+    intValue?: string | number;
+    doubleValue?: number;
+    boolValue?: boolean;
+    arrayValue?: { values?: Array<IKeyValue['value']> };
+    kvlistValue?: { values?: IKeyValue[] };
+  };
+}
+
+interface ISpan {
+  traceId: Uint8Array | string;
+  spanId: Uint8Array | string;
+  parentSpanId?: Uint8Array | string;
+  name: string;
+  kind: number;
+  startTimeUnixNano: string | number;
+  endTimeUnixNano: string | number;
+  attributes: IKeyValue[];
+  status?: {
+    code?: number;
+    message?: string;
+  };
+}
+
+interface IExportTraceServiceRequest {
+  resourceSpans: Array<{
+    scopeSpans: Array<{
+      spans?: ISpan[];
+    }>;
+  }>;
+}
+
+// Dynamic import for protobuf root - loaded at runtime
+let _root: any = null;
+async function getProtobufRoot(): Promise<any> {
+  if (!_root) {
+    // @ts-ignore - internal module path
+    _root = await import('@opentelemetry/otlp-transformer/build/esm/generated/root');
+  }
+  return _root;
+}
 
 /**
  * Value types that can appear in OTEL key-value pairs
@@ -121,19 +160,20 @@ export function keyValueArrayToObject(
 export function extractSpans(request: IExportTraceServiceRequest): ISpan[] {
   if (!request.resourceSpans) return [];
 
-  return request.resourceSpans.flatMap((resourceSpan) =>
-    resourceSpan.scopeSpans.flatMap((scopeSpan) => scopeSpan.spans || []),
+  return request.resourceSpans.flatMap((resourceSpan: any) =>
+    resourceSpan.scopeSpans.flatMap((scopeSpan: any) => scopeSpan.spans || []),
   );
 }
 
 /**
  * Parse spans from binary protobuf format (application/x-protobuf)
  */
-export function parseProtobufBinary(
+export async function parseProtobufBinary(
   requestBinary: Uint8Array,
-): IExportTraceServiceRequest {
+): Promise<IExportTraceServiceRequest> {
   // Get the ExportTraceServiceRequest type from the generated root
   // Cast to any because the protobuf types are dynamically generated
+  const root = await getProtobufRoot();
   const ExportTraceServiceRequest = (root as any).opentelemetry.proto.collector
     .trace.v1.ExportTraceServiceRequest;
 
@@ -174,14 +214,14 @@ export function isJsonContentType(contentType: string | undefined): boolean {
  * Parse OpenTelemetry traces from either binary protobuf or JSON format
  * This is the main function to use in createTestServer
  */
-export function parseOtelTraces(
+export async function parseOtelTraces(
   data: Uint8Array | unknown,
   contentType: string | undefined,
-): {
+): Promise<{
   traceRequest: IExportTraceServiceRequest;
   spans: ISpan[];
   format: 'json' | 'protobuf';
-} {
+}> {
   const isJson = isJsonContentType(contentType);
 
   let traceRequest: IExportTraceServiceRequest;
@@ -190,7 +230,7 @@ export function parseOtelTraces(
     traceRequest = parseProtobufJson(data);
   } else {
     // Handle binary protobuf (default)
-    traceRequest = parseProtobufBinary(data as Uint8Array);
+    traceRequest = await parseProtobufBinary(data as Uint8Array);
   }
 
   // Extract spans

@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 import { satisfies } from 'semver';
-import { red } from './src/utils/logging';
+import { red } from './src/utils/logging.js';
 
 import yargs from 'yargs';
+// @ts-expect-error - yargs/helpers types not available in ESM
 import { hideBin } from 'yargs/helpers';
-import chalk from 'chalk';
 
 const NODE_VERSION_RANGE = '>=18.17.0';
 
-// Have to run this above the other imports because they are importing clack that
-// has the problematic imports.
+// Node version check - must use console.log before Ink is initialized
 if (!satisfies(process.version, NODE_VERSION_RANGE)) {
   red(
     `Raindrop wizard requires Node.js ${NODE_VERSION_RANGE}. You are using Node.js ${process.version}. Please upgrade your Node.js version.`,
@@ -17,10 +16,10 @@ if (!satisfies(process.version, NODE_VERSION_RANGE)) {
   process.exit(1);
 }
 
-import type { WizardOptions } from './src/utils/types';
-import { runWizard } from './src/run';
-import { isNonInteractiveEnvironment } from './src/utils/environment';
-import clack from './src/utils/ui';
+import type { WizardOptions } from './src/utils/types.js';
+import { runWizard } from './src/run.js';
+import { isNonInteractiveEnvironment } from './src/utils/environment.js';
+import clack, { initWizardUI } from './src/utils/ui.js';
 
 yargs(hideBin(process.argv))
   .env('RAINDROP')
@@ -65,7 +64,7 @@ yargs(hideBin(process.argv))
         },
       });
     },
-    (argv) => {
+    async (argv) => {
       const options = { ...argv };
 
       // Handle RAINDROP_WRITE_KEY env var (yargs expects RAINDROP_API_KEY)
@@ -73,22 +72,36 @@ yargs(hideBin(process.argv))
         options.apiKey = process.env.RAINDROP_WRITE_KEY;
       }
 
-      // TTY check
+      // TTY check - must use console before Ink is initialized
       if (isNonInteractiveEnvironment()) {
-        clack.intro(chalk.inverse(`Raindrop Wizard`));
-        clack.log.error(
-          'This installer requires an interactive terminal (TTY) to run.\n' +
-            'It appears you are running in a non-interactive environment.\n' +
-            'Please run the wizard in an interactive terminal.',
+        red(
+          'Raindrop Wizard requires an interactive terminal (TTY) to run.\n' +
+          'It appears you are running in a non-interactive environment.\n' +
+          'Please run the wizard in an interactive terminal.',
         );
         process.exit(1);
       }
 
-      void runWizard(options as unknown as WizardOptions);
+      // Initialize the unified Ink app (single render call)
+      const wizardUI = await initWizardUI();
+
+      // Display logo through Ink
+      clack.showLogo();
+
+      try {
+        await runWizard(options as unknown as WizardOptions);
+      } catch (error) {
+        clack.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        wizardUI.unmount();
+        process.exit(1);
+      }
+
+      // The wizard completes - unmount the UI
+      wizardUI.unmount();
     },
   )
   .help()
   .alias('help', 'h')
   .version()
   .alias('version', 'v')
-  .wrap(process.stdout.isTTY ? yargs.terminalWidth() : 80).argv;
+  .wrap(null).argv; // null = use terminal width automatically

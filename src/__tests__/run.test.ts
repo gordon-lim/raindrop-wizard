@@ -1,8 +1,8 @@
-import { runWizard } from '../run';
-import { runPythonWizard } from '../python/python-wizard';
-import { Integration } from '../lib/constants';
+import { runWizard } from '../run.js';
+import { runPythonWizard } from '../python/python-wizard.js';
+import { Integration } from '../lib/constants.js';
 
-jest.mock('../python/python-wizard');
+jest.mock('../python/python-wizard.js');
 jest.mock('../utils/clack');
 
 const mockRunPythonWizard = runPythonWizard as jest.MockedFunction<

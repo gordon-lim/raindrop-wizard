@@ -1,14 +1,14 @@
-import type { WizardOptions } from '../utils/types';
-import type { FrameworkConfig } from '../lib/framework-config';
-import type { PackageJson } from '../utils/package-json-types';
-import { enableDebugLogs } from '../utils/debug';
-import { runAgentWizard } from '../lib/agent-runner';
-import { Integration } from '../lib/constants';
-import { getPackageVersion } from '../utils/package-json';
+import type { WizardOptions } from '../utils/types.js';
+import type { FrameworkConfig } from '../lib/framework-config.js';
+import type { PackageJson } from '../utils/package-json-types.js';
+import { enableDebugLogs } from '../utils/debug.js';
+import { runAgentWizard } from '../lib/agent-runner.js';
+import { Integration } from '../lib/constants.js';
+import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
-import clack from '../utils/ui';
-import { abort } from '../utils/clack-utils';
+import clack from '../utils/ui.js';
+import { abort } from '../utils/clack-utils.js';
 
 /**
  * Vercel AI SDK framework configuration for the universal agent runner.

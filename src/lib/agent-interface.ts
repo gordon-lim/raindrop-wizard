@@ -4,10 +4,10 @@
  */
 
 import path from 'path';
-import clack from '../utils/ui';
-import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug';
-import type { WizardOptions } from '../utils/types';
-import { LINTING_TOOLS } from './safe-tools';
+import clack from '../utils/ui.js';
+import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug.js';
+import type { WizardOptions } from '../utils/types.js';
+import { LINTING_TOOLS } from './safe-tools.js';
 
 // Dynamic import cache for ESM module
 let _sdkModule: any = null;

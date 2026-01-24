@@ -1,6 +1,7 @@
 {
   "name": "@raindrop/wizard",
   "version": "1.25.0",
+  "type": "module",
   "homepage": "https://github.com/raindrop/wizard",
   "repository": "https://github.com/raindrop/wizard",
   "description": "The raindrop.ai wizard helps you to configure your project",
@@ -103,7 +104,7 @@
     "build:watch": "pnpm tsc -w",
     "build": "pnpm tsc",
     "postbuild": "chmod +x ./dist/bin.js && cp -r scripts/** dist && pnpm test:smoke",
-    "test:smoke": "node -e \"require('./dist/bin.js')\" 2>&1 | head -5 | grep -q 'Raindrop Wizard' || (echo 'Smoke test failed: compiled binary crashed on load' && exit 1)",
+    "test:smoke": "node --input-type=module -e \"import('./dist/bin.js')\" 2>&1 | head -5 | grep -q 'Raindrop Wizard' || (echo 'Smoke test failed: compiled binary crashed on load' && exit 1)",
     "lint": "pnpm lint:prettier && pnpm lint:eslint",
     "lint:prettier": "prettier --check \"{lib,src,test}/**/*.ts\"",
     "lint:eslint": "eslint . --cache --format stylish",

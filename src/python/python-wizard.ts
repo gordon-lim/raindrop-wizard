@@ -1,11 +1,11 @@
-import type { WizardOptions } from '../utils/types';
-import type { FrameworkConfig } from '../lib/framework-config';
-import { enableDebugLogs } from '../utils/debug';
-import { runAgentWizard } from '../lib/agent-runner';
-import { Integration, TEST_URL } from '../lib/constants';
+import type { WizardOptions } from '../utils/types.js';
+import type { FrameworkConfig } from '../lib/framework-config.js';
+import { enableDebugLogs } from '../utils/debug.js';
+import { runAgentWizard } from '../lib/agent-runner.js';
+import { Integration, TEST_URL } from '../lib/constants.js';
 import fs from 'fs';
 import path from 'path';
-import { addTestUrl, removeTestUrl } from '../utils/test-url';
+import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
 
 /**
  * Python framework configuration for the universal agent runner.

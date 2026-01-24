@@ -2,8 +2,8 @@
  * Agent prompt templates for raindrop.ai integration wizard
  */
 
-import type { FrameworkConfig } from './framework-config';
-import { logToFile } from '../utils/debug';
+import type { FrameworkConfig } from './framework-config.js';
+import { logToFile } from '../utils/debug.js';
 
 /**
  * Build test feedback message for agent

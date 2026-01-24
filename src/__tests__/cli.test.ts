@@ -1,7 +1,7 @@
 // Mock functions must be defined before imports
 const mockRunWizard = jest.fn();
 
-jest.mock('../run', () => ({ runWizard: mockRunWizard }));
+jest.mock('../run.js', () => ({ runWizard: mockRunWizard }));
 jest.mock('semver', () => ({ satisfies: () => true }));
 
 describe('CLI argument parsing', () => {

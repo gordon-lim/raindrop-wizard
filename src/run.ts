@@ -1,17 +1,20 @@
-import { abortIfCancelled } from './utils/clack-utils';
+import { abortIfCancelled } from './utils/clack-utils.js';
 
-import type { WizardOptions } from './utils/types';
+import type { WizardOptions } from './utils/types.js';
 
-import { getIntegrationDescription, Integration } from './lib/constants';
-import { readEnvironment } from './utils/environment';
-import clack from './utils/ui';
+import { getIntegrationDescription, Integration } from './lib/constants.js';
+import { readEnvironment } from './utils/environment.js';
+import clack from './utils/ui.js';
 import path from 'path';
-import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config';
-import { runPythonWizard } from './python/python-wizard';
-import { runTypescriptWizard } from './typescript/typescript-wizard';
-import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard';
+import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config.js';
+import { runPythonWizard } from './python/python-wizard.js';
+import { runTypescriptWizard } from './typescript/typescript-wizard.js';
+import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard.js';
 import { EventEmitter } from 'events';
-import chalk from 'chalk';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
 
 EventEmitter.defaultMaxListeners = 50;
 

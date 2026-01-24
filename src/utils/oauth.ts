@@ -1,10 +1,13 @@
 import * as crypto from 'node:crypto';
 import * as http from 'node:http';
 import axios from 'axios';
-import chalk from 'chalk';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
 import opn from 'opn';
 import { z } from 'zod';
-import clack from './ui';
+import clack from './ui.js';
 import {
   API_KEY_ENDPOINT,
   ISSUES_URL,
@@ -14,8 +17,8 @@ import {
   OAUTH_REDIRECT_URI,
   OAUTH_TOKEN_URL,
   OAUTH_USERINFO_URL,
-} from '../lib/constants';
-import { abort } from './clack-utils';
+} from '../lib/constants.js';
+import { abort } from './clack-utils.js';
 
 const OAUTH_CALLBACK_STYLES = `
   <style>

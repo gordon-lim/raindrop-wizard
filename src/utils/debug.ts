@@ -1,7 +1,10 @@
-import chalk from 'chalk';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
 import { appendFileSync } from 'fs';
-import { prepareMessage } from './logging';
-import clack from './ui';
+import { prepareMessage } from './logging.js';
+import clack from './ui.js';
 
 let debugEnabled = false;
 

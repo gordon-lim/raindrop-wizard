@@ -1,9 +1,15 @@
-import readEnv from 'read-env';
-import type { WizardOptions } from './types';
+import readEnvModule from 'read-env';
+import type { WizardOptions } from './types.js';
 import fg from 'fast-glob';
-import { IS_DEV } from '../lib/constants';
+import { IS_DEV } from '../lib/constants.js';
 import fs from 'fs';
 import path from 'path';
+
+// Handle CJS interop - read-env exports { default: fn }
+const readEnv =
+  typeof readEnvModule === 'function'
+    ? readEnvModule
+    : (readEnvModule as { default: typeof readEnvModule }).default;
 
 export function isNonInteractiveEnvironment(): boolean {
   if (IS_DEV) {

@@ -1,5 +1,5 @@
-import type { Integration } from './constants';
-import type { PackageJson } from '../utils/package-json-types';
+import type { Integration } from './constants.js';
+import type { PackageJson } from '../utils/package-json-types.js';
 
 /**
  * Configuration interface for framework-specific agent integrations.

@@ -1,76 +1,174 @@
 /**
- * Re-export ink prompts for consistent usage across the codebase.
+ * Unified UI API for the raindrop wizard.
  *
- * Note: ink is an ESM-only package with top-level await, but this project compiles to CommonJS.
- * We split components into two groups:
- * - Non-ink components (Message, Logger) can be imported synchronously
- * - Ink-dependent components (Select, Confirm, TextInput, Spinner) need dynamic imports
+ * This module provides a clack-compatible API that dispatches to the unified
+ * Ink app via WizardContext actions. No more separate render() calls!
+ *
+ * Usage:
+ * 1. Call startWizardUI() once at startup (in bin.ts)
+ * 2. Use clack.select(), clack.text(), etc. - they dispatch to the unified app
+ * 3. The app unmounts when you call the exit action
  */
 
-// Import non-ink components directly (they don't use ink, just console.log)
-import { intro, outro, note, cancel } from '../ui/components/Message';
 import {
-  log,
-  logTaskResult,
-  logResult,
-  logTask,
-} from '../ui/components/Logger';
-import { isCancel } from '../ui/cancellation';
+  getWizardActions,
+  startWizardUI,
+  isWizardRunning,
+  type WizardInstance,
+} from '../ui/render.js';
+import { isCancel, CANCEL_SYMBOL } from '../ui/cancellation.js';
+import type {
+  SelectOptions,
+  TextOptions,
+  ConfirmOptions,
+  SpinnerInstance,
+} from '../ui/types.js';
 
-// Dynamic imports for ink-dependent components
-async function select<T>(options: any): Promise<T | symbol> {
-  const { select: selectFn } = await import('../ui/components/Select.js');
-  return selectFn(options);
+// Re-export types for convenience
+export type { SelectOptions, TextOptions, ConfirmOptions, SpinnerInstance };
+export { isCancel, CANCEL_SYMBOL };
+
+// Global wizard instance
+let wizardInstance: WizardInstance | null = null;
+
+/**
+ * Initialize the wizard UI. Must be called before using any prompts.
+ * Returns a promise that resolves when the wizard is ready.
+ */
+async function initWizardUIInternal(): Promise<WizardInstance> {
+  if (wizardInstance) {
+    return wizardInstance;
+  }
+  wizardInstance = startWizardUI();
+  // Wait for the wizard to be ready (actions available)
+  await wizardInstance.waitUntilReady();
+  return wizardInstance;
 }
 
-async function confirm(options: any): Promise<boolean | symbol> {
-  const { confirm: confirmFn } = await import('../ui/components/Confirm.js');
-  return confirmFn(options);
+/**
+ * Get actions, initializing the wizard if needed.
+ * Throws if wizard hasn't been started.
+ */
+function getActions() {
+  const actions = getWizardActions();
+  if (!actions) {
+    throw new Error(
+      'Wizard UI not initialized. Call initWizardUI() first (usually in bin.ts)',
+    );
+  }
+  return actions;
 }
 
-async function text(options: any): Promise<string | symbol> {
-  const { text: textFn } = await import('../ui/components/TextInput.js');
-  return textFn(options);
+/**
+ * Display a select prompt and return the selected value.
+ */
+async function select<T>(options: SelectOptions<T>): Promise<T | symbol> {
+  const actions = getActions();
+  return actions.showSelect(options) as Promise<T | symbol>;
 }
 
-function spinner(): any {
-  // Create a lazy-loading spinner that dynamically imports when start() is called
-  let realSpinner: any = null;
-  let spinnerPromise: Promise<any> | null = null;
-
-  const ensureSpinner = async () => {
-    if (!realSpinner) {
-      if (!spinnerPromise) {
-        spinnerPromise = (async () => {
-          const { spinner: spinnerFn } = await import(
-            '../ui/components/Spinner.js'
-          );
-          realSpinner = await spinnerFn();
-          return realSpinner;
-        })();
-      }
-      await spinnerPromise;
-    }
-    return realSpinner;
-  };
-
-  return {
-    start: async (msg?: string) => {
-      const s = await ensureSpinner();
-      s.start(msg);
-    },
-    stop: (msg?: string) => {
-      if (realSpinner) {
-        realSpinner.stop(msg);
-      }
-    },
-    message: (msg: string) => {
-      if (realSpinner) {
-        realSpinner.message(msg);
-      }
-    },
-  };
+/**
+ * Display a text input prompt and return the entered value.
+ */
+async function text(options: TextOptions): Promise<string | symbol> {
+  const actions = getActions();
+  return actions.showText(options);
 }
+
+/**
+ * Display a confirm prompt and return the boolean result.
+ */
+async function confirm(options: ConfirmOptions): Promise<boolean | symbol> {
+  const actions = getActions();
+  return actions.showConfirm(options);
+}
+
+/**
+ * Create and return a spinner instance.
+ */
+function spinner(): SpinnerInstance {
+  const actions = getActions();
+  return actions.showSpinner();
+}
+
+/**
+ * Display an intro message.
+ */
+function intro(message: string): void {
+  const actions = getActions();
+  actions.intro(message);
+}
+
+/**
+ * Display an outro message.
+ */
+function outro(message: string): void {
+  const actions = getActions();
+  actions.outro(message);
+}
+
+/**
+ * Display a note message with optional title.
+ */
+function note(message: string, title?: string): void {
+  const actions = getActions();
+  actions.note(message, title);
+}
+
+/**
+ * Display a cancellation message.
+ */
+function cancel(message?: string): void {
+  const actions = getActions();
+  actions.cancel(message);
+}
+
+/**
+ * Display the logo.
+ */
+function showLogo(): void {
+  const actions = getActions();
+  actions.showLogo();
+}
+
+/**
+ * Log functions for various message types.
+ */
+const log = {
+  info: (msg: string) => getActions().log.info(msg),
+  warn: (msg: string) => getActions().log.warn(msg),
+  error: (msg: string) => getActions().log.error(msg),
+  success: (msg: string) => getActions().log.success(msg),
+  step: (msg: string) => getActions().log.step(msg),
+};
+
+/**
+ * Helper functions for task logging (Claude Code style).
+ */
+function logTaskResult(taskName: string, details: string): void {
+  const actions = getActions();
+  actions.log.success(taskName);
+  actions.addHistoryItem({
+    type: 'log-info',
+    content: `  └─ ${details}`,
+  });
+}
+
+function logResult(message: string): void {
+  const actions = getActions();
+  actions.addHistoryItem({
+    type: 'log-info',
+    content: `  └─ ${message}`,
+  });
+}
+
+function logTask(taskName: string): void {
+  const actions = getActions();
+  actions.log.success(taskName);
+}
+
+// Re-export for direct access
+export { initWizardUIInternal as initWizardUI };
 
 // Export as clack-compatible API
 const inkPrompts = {
@@ -87,6 +185,28 @@ const inkPrompts = {
   logResult,
   logTask,
   isCancel,
+  showLogo,
+  // Additional exports for initialization
+  initWizardUI: initWizardUIInternal,
+  isWizardRunning,
 };
 
 export default inkPrompts;
+
+// Named exports for direct imports
+export {
+  select,
+  confirm,
+  text,
+  spinner,
+  intro,
+  outro,
+  note,
+  cancel,
+  log,
+  logTaskResult,
+  logResult,
+  logTask,
+  showLogo,
+  isWizardRunning,
+};

@@ -1,9 +1,9 @@
-import type { WizardOptions } from '../utils/types';
-import { Integration } from './constants';
+import type { WizardOptions } from '../utils/types.js';
+import { Integration } from './constants.js';
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
-import clack from '../utils/ui';
+import clack from '../utils/ui.js';
 
 type IntegrationConfig = {
   detect: (options: Pick<WizardOptions, 'installDir'>) => Promise<boolean>;

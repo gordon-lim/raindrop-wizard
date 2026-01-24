@@ -2,27 +2,30 @@ import {
   getWelcomeMessage,
   SPINNER_MESSAGE,
   type FrameworkConfig,
-} from './framework-config';
-import type { WizardOptions } from '../utils/types';
-import type { PackageJson } from '../utils/package-json-types';
+} from './framework-config.js';
+import type { WizardOptions } from '../utils/types.js';
+import type { PackageJson } from '../utils/package-json-types.js';
 import {
   abort,
   askForAIConsent,
   confirmContinueIfNoOrDirtyGitRepo,
   printWelcome,
-} from '../utils/clack-utils';
-import { writeApiKeyToEnv } from '../utils/environment';
+} from '../utils/clack-utils.js';
+import { writeApiKeyToEnv } from '../utils/environment.js';
 import fs from 'fs';
 import path from 'path';
-import clack from '../utils/ui';
-import { initializeAgent, runAgent } from './agent-interface';
-import { logToFile, LOG_FILE_PATH, debug } from '../utils/debug';
-import chalk from 'chalk';
-import { askForWizardLogin } from '../utils/clack-utils';
-import { getUserApiKey } from '../utils/oauth';
-import { Integration } from './constants';
-import { buildIntegrationPrompt } from './agent-prompts';
-import { testIntegration } from './test-server';
+import clack from '../utils/ui.js';
+import { initializeAgent, runAgent } from './agent-interface.js';
+import { logToFile, LOG_FILE_PATH, debug } from '../utils/debug.js';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
+import { askForWizardLogin } from '../utils/clack-utils.js';
+import { getUserApiKey } from '../utils/oauth.js';
+import { Integration } from './constants.js';
+import { buildIntegrationPrompt } from './agent-prompts.js';
+import { testIntegration } from './test-server.js';
 
 /**
  * Universal agent-powered wizard runner.

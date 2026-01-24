@@ -1,4 +1,7 @@
-import Chalk from 'chalk';
+import ChalkModule from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const Chalk = ChalkModule as any;
 
 export function prepareMessage(msg: unknown): string {
   if (typeof msg === 'string') {

@@ -1,18 +1,21 @@
 import http from 'http';
-import chalk from 'chalk';
-import clack from '../utils/ui';
-import { logToFile } from '../utils/debug';
+import Chalk from 'chalk';
+
+// chalk v2 types don't work well with ESM default imports
+const chalk = Chalk as any;
+import clack from '../utils/ui.js';
+import { logToFile } from '../utils/debug.js';
 import {
   parseOtelTraces,
   spanToSimpleFormat,
   extractAIAttributes,
-} from './otel-parser';
-import { waitForUserKeyPress } from '../utils/clack-utils';
-import { TEST_PORT, TEST_URL } from './constants';
-import { buildTestFeedbackMessage } from './agent-prompts';
-import { runAgent, type AgentRunConfig } from './agent-interface';
-import type { FrameworkConfig } from './framework-config';
-import type { WizardOptions } from '../utils/types';
+} from './otel-parser.js';
+import { waitForUserKeyPress } from '../utils/clack-utils.js';
+import { TEST_PORT, TEST_URL } from './constants.js';
+import { buildTestFeedbackMessage } from './agent-prompts.js';
+import { runAgent, type AgentRunConfig } from './agent-interface.js';
+import type { FrameworkConfig } from './framework-config.js';
+import type { WizardOptions } from '../utils/types.js';
 
 /**
  * JSON event format (legacy raindrop.ai event)
@@ -66,7 +69,7 @@ function createTestServer(): {
         chunks.push(Buffer.from(chunk));
       });
 
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const buffer = Buffer.concat(chunks);
 
@@ -81,7 +84,7 @@ function createTestServer(): {
           } else {
             // Binary protobuf = OTEL format
             try {
-              const { spans } = parseOtelTraces(
+              const { spans } = await parseOtelTraces(
                 new Uint8Array(buffer),
                 contentType,
               );

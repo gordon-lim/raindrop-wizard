@@ -1,4 +1,4 @@
-import type { PackageJson } from './package-json-types';
+import type { PackageJson } from './package-json-types.js';
 
 /**
  * @deprecated Use PackageJson from package-json-types.ts instead
