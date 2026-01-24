@@ -5,7 +5,12 @@ import { runAgentWizard } from '../lib/agent-runner.js';
 import { Integration, TEST_URL } from '../lib/constants.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Python framework configuration for the universal agent runner.

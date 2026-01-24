@@ -4,10 +4,14 @@
  */
 
 import path from 'path';
+import { createRequire } from 'module';
 import clack from '../utils/ui.js';
 import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug.js';
 import type { WizardOptions } from '../utils/types.js';
 import { LINTING_TOOLS } from './safe-tools.js';
+
+// Create a require function for ESM compatibility
+const require = createRequire(import.meta.url);
 
 // Dynamic import cache for ESM module
 let _sdkModule: any = null;

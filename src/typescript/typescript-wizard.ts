@@ -7,9 +7,14 @@ import { Integration, TEST_URL } from '../lib/constants.js';
 import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import clack from '../utils/ui.js';
 import { abort } from '../utils/clack-utils.js';
 import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * TypeScript framework configuration for the universal agent runner.
