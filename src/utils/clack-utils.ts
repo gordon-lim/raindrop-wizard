@@ -51,9 +51,13 @@ export async function confirmContinueIfNoOrDirtyGitRepo(
     const continueWithoutGit = options.default
       ? true
       : await abortIfCancelled(
-        ui.confirm({
+        ui.select({
           message:
             'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
+          options: [
+            { label: 'Yes', value: true },
+            { label: 'No', value: false },
+          ],
         }),
       );
 
@@ -75,8 +79,12 @@ ${uncommittedOrUntrackedFiles.join('\n')}
 The wizard will create and update files.`,
     });
     const continueWithDirtyRepo = await abortIfCancelled(
-      ui.confirm({
+      ui.select({
         message: 'Do you want to continue anyway?',
+        options: [
+          { label: 'Yes', value: true },
+          { label: 'No', value: false },
+        ],
       }),
     );
 

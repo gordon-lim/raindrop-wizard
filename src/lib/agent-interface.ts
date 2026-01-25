@@ -151,6 +151,10 @@ export async function runAgentLoop(
     resume,
   } = config ?? {};
 
+
+  // Add header to indicate start of interactive agent phase
+  ui.addItem({ type: 'phase', text: '### Agent ###' });
+
   const cliPath = getClaudeCodeExecutablePath();
   logToFile('Starting agent run');
   logToFile('Claude Code executable:', cliPath);
@@ -217,13 +221,9 @@ export async function runAgentLoop(
         mcpServers: {
           'raindrop-wizard': completionMcpServer,
         },
-        systemPrompt: { type: "preset", preset: "claude_code" },
         env: { ...process.env },
         resume: currentSessionId,
         canUseTool: createCanUseToolHandler(),
-        // NOTE: permissions option not available in current SDK version
-        // Permission rules would protect sensitive files if supported
-        // Capture stderr from CLI subprocess for debugging
         stderr: (data: string) => {
           logToFile('CLI stderr:', data);
           if (options.debug) {

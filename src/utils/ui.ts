@@ -19,7 +19,6 @@ import { isCancel, CANCEL_SYMBOL } from '../ui/cancellation.js';
 import type {
   SelectOptions,
   TextOptions,
-  ConfirmOptions,
   SpinnerInstance,
   ToolApprovalProps,
   ToolApprovalResult,
@@ -32,7 +31,6 @@ import type { HistoryItemInput, AgentState } from '../ui/contexts/WizardContext.
 export type {
   SelectOptions,
   TextOptions,
-  ConfirmOptions,
   SpinnerInstance,
   HistoryItemInput,
   ToolApprovalProps,
@@ -97,13 +95,6 @@ export async function select<T>(options: SelectOptions<T>): Promise<T | symbol> 
  */
 export async function text(options: TextOptions): Promise<string | symbol> {
   return getActions().text(options);
-}
-
-/**
- * Display a confirm prompt and return the boolean result.
- */
-export async function confirm(options: ConfirmOptions): Promise<boolean | symbol> {
-  return getActions().confirm(options);
 }
 
 /**
@@ -182,7 +173,6 @@ const ui = {
   addItem,
   select,
   text,
-  confirm,
   spinner,
   exit,
   isCancel,

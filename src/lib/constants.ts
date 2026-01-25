@@ -36,3 +36,4 @@ export const TEST_URL = `http://localhost:${TEST_PORT}/`;
 
 export const API_BASE_URL = 'http://localhost:3000';
 export const API_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;
+export const EVENTS_LIST_ENDPOINT = `${API_BASE_URL}/api/cli/events/list`;

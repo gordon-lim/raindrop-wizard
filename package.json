@@ -40,6 +40,7 @@
     "@opentelemetry/otlp-transformer": "^0.210.0",
     "axios": "1.7.4",
     "chalk": "^2.4.1",
+    "diff": "^8.0.3",
     "fast-glob": "^3.3.3",
     "glob": "9.3.5",
     "ink": "^5.2.1",
@@ -65,6 +66,7 @@
   "devDependencies": {
     "@babel/types": "~7.21.4",
     "@types/chai": "^4.3.17",
+    "@types/diff": "^8.0.0",
     "@types/glob": "^7.2.0",
     "@types/inquirer": "^0.0.43",
     "@types/jest": "^29.5.14",

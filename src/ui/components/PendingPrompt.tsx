@@ -11,7 +11,6 @@ import { Box, Text } from 'ink';
 import type { PendingItem } from '../contexts/WizardContext.js';
 import { SelectPrompt } from './SelectPrompt.js';
 import { TextPrompt } from './TextPrompt.js';
-import { ConfirmPrompt } from './ConfirmPrompt.js';
 import { SpinnerDisplay } from './SpinnerDisplay.js';
 import { PersistentTextInput } from './PersistentTextInput.js';
 import { ToolApprovalPrompt } from './ToolApprovalPrompt.js';
@@ -19,7 +18,6 @@ import { ClarifyingQuestionsPrompt } from './ClarifyingQuestionsPrompt.js';
 import type {
   SelectOptions,
   TextOptions,
-  ConfirmOptions,
   PersistentInputProps,
   ToolApprovalProps,
   ClarifyingQuestionsProps,
@@ -40,9 +38,6 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
 
     case 'text':
       return <TextPrompt options={item.props as TextOptions} />;
-
-    case 'confirm':
-      return <ConfirmPrompt options={item.props as ConfirmOptions} />;
 
     case 'spinner':
       return <SpinnerDisplay message={(item.props as { message: string }).message} />;

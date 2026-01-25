@@ -12,6 +12,9 @@ import type { WizardOptions } from '../utils/types.js';
 // syntax which prettier cannot parse.
 type SDKMessage = any;
 
+/** Internal SDK tools that should not be stored/displayed */
+const INTERNAL_TOOLS = new Set(['Task', 'AskUserQuestion', 'TodoWrite', 'mcp__raindrop-wizard__CompleteIntegration']);
+
 /**
  * Extract result summary from tool result content
  */
@@ -94,7 +97,7 @@ export function processSDKMessage(
             logToFile(`Tool use requested: ${toolName} (id: ${toolUseId})`, toolInput);
 
             // Skip storing/displaying internal SDK tools
-            if (toolName === 'Task' || toolName === 'AskUserQuestion' || toolName === 'TodoWrite') {
+            if (INTERNAL_TOOLS.has(toolName)) {
               continue;
             }
 

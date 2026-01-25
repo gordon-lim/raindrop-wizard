@@ -1,6 +1,5 @@
 import * as crypto from 'node:crypto';
 import * as http from 'node:http';
-import axios from 'axios';
 import Chalk from 'chalk';
 
 // chalk v2 types don't work well with ESM default imports
@@ -219,33 +218,50 @@ async function exchangeCodeForToken(
   params.append('grant_type', 'authorization_code');
   params.append('code_verifier', codeVerifier);
 
-  const response = await axios.post(OAUTH_TOKEN_URL, params, {
+  const response = await fetch(OAUTH_TOKEN_URL, {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
+    body: params.toString(),
   });
 
-  return OAuthTokenResponseSchema.parse(response.data);
+  if (!response.ok) {
+    throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return OAuthTokenResponseSchema.parse(data);
 }
 
 export async function getUserInfo(accessToken: string): Promise<OAuthUserInfo> {
-  const response = await axios.get(OAUTH_USERINFO_URL, {
+  const response = await fetch(OAUTH_USERINFO_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
 
-  return OAuthUserInfoSchema.parse(response.data);
+  if (!response.ok) {
+    throw new Error(`Failed to get user info: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return OAuthUserInfoSchema.parse(data);
 }
 
 export async function getUserApiKey(accessToken: string): Promise<string> {
-  const response = await axios.get(API_KEY_ENDPOINT, {
+  const response = await fetch(API_KEY_ENDPOINT, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
 
-  return response.data.api_key;
+  if (!response.ok) {
+    throw new Error(`Failed to get API key: ${response.status} ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { api_key: string };
+  return data.api_key;
 }
 
 export async function performOAuthFlow(

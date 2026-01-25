@@ -10,10 +10,6 @@ export interface FrameworkConfig {
   detection: FrameworkDetection;
   prompts: PromptConfig;
   ui: UIConfig;
-  /** Optional setup function to run before testing (e.g., add test endpoint) */
-  setup?: () => Promise<void>;
-  /** Optional cleanup function to run after agent completes (e.g., remove test endpoint) */
-  cleanup?: () => Promise<void>;
 }
 
 /**

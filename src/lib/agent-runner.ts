@@ -88,9 +88,7 @@ export async function runAgentWizard(
     ui.addItem({ type: 'response', text: `Prompt preview: ${integrationPrompt.substring(0, 200)}...` });
   }
 
-  // Initialize and run agent
-  const spinner = ui.spinner();
-
+  // Initialize agent
   const agent = initializeAgent(
     {
       workingDirectory: options.installDir,
@@ -98,78 +96,36 @@ export async function runAgentWizard(
     options,
   );
 
-  // Use try-finally to ensure cleanup always runs, even if setup or test fails
-  try {
+  // Unified loop: run agent, then test, repeat if user provides feedback
+  // TODO: Enable test integration for vercelaisdk once implemented
+  let prompt = integrationPrompt;
+  let resume: string | undefined = undefined;
+  let shouldContinue = true;
 
-    // Add header to indicate start of interactive agent phase
-    ui.addItem({ type: 'phase', text: '### Agent ###' });
-    // Run agent to do the integration
+  while (shouldContinue) {
     const agentResult = await runAgentLoop(
       agent,
-      integrationPrompt,
+      prompt,
       options,
       {
         spinnerMessage: SPINNER_MESSAGE,
         successMessage: config.ui.successMessage,
+        resume,
       },
     );
 
-    // Run setup function if provided (e.g., add test endpoint)
-    if (config.setup) {
-      spinner.start('Configuring test environment...');
-      try {
-        await config.setup();
-        spinner.stop('Test environment configured');
-      } catch (error) {
-        spinner.stop('Setup encountered issues (non-fatal)');
-        logToFile('Setup error:', error);
-        throw error; // Re-throw to trigger cleanup
-      }
+    // Skip testing for vercelAiSdk (not yet implemented)
+    if (config.metadata.integration === Integration.vercelAiSdk) {
+      break;
     }
 
-    // Test loop: continue until user says it's good or max attempts
-    // TODO: Enable test integration for vercelaisdk once implemented
-    if (config.metadata.integration !== Integration.vercelAiSdk) {
-      let currentSessionId = agentResult.sessionId;
-      let attemptNumber = 0;
-      let shouldContinue = true;
-      const MAX_ATTEMPTS = 3;
+    const result = await testIntegration(options, token.access_token);
 
-      while (shouldContinue && attemptNumber < MAX_ATTEMPTS) {
-        attemptNumber++;
-
-        const result = await testIntegration(
-          agent,
-          currentSessionId,
-          config,
-          options,
-          attemptNumber,
-        );
-
-        currentSessionId = result.sessionId;
-        shouldContinue = result.shouldRetry;
-      }
-
-      if (attemptNumber >= MAX_ATTEMPTS && shouldContinue) {
-        ui.addItem({
-          type: 'warning',
-          text: chalk.yellow(
-            'Maximum test attempts (3) reached. Proceeding with current state.',
-          ),
-        });
-      }
-    }
-  } finally {
-    // Run cleanup function if provided - this ALWAYS runs
-    if (config.cleanup) {
-      spinner.start('Cleaning up test configuration...');
-      try {
-        await config.cleanup();
-        spinner.stop('Test configuration cleaned up');
-      } catch (error) {
-        spinner.stop('Cleanup encountered issues (non-fatal)');
-        logToFile('Cleanup error:', error);
-      }
+    if (result.shouldRetry && result.feedbackPrompt) {
+      prompt = result.feedbackPrompt;
+      resume = agentResult.sessionId;
+    } else {
+      shouldContinue = false;
     }
   }
 
@@ -178,8 +134,7 @@ export async function runAgentWizard(
 
   const nextSteps = [...config.ui.getOutroNextSteps({})].filter(Boolean);
 
-  const outroMessage = `
-${chalk.green('Successfully installed raindrop.ai!')}
+  const outroMessage = `${chalk.white('Raindrop successfully integrated')}
 
 ${chalk.cyan('What the agent did:')}
 ${changes.map((change) => `• ${change}`).join('\n')}
@@ -192,5 +147,5 @@ ${chalk.dim(
     'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
   )}`;
 
-  ui.addItem({ type: 'outro', text: outroMessage });
+  ui.addItem({ type: 'success', text: outroMessage });
 }

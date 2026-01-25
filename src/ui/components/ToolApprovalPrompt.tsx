@@ -119,9 +119,20 @@ export function ToolApprovalPrompt({
 
   // Render tool-specific details
   const renderToolDetails = () => {
-    // For file edits (Write, Edit, StrReplace), show diff
-    if (diffContent) {
-      return <DiffDisplay diffContent={diffContent} fileName={fileName} maxHeight={15} />;
+    // For file modifications with diff content, show the diff
+    if (diffContent && fileName) {
+      const action = toolName === 'Write' ? 'Write file' : 'Edit file';
+      return (
+        <Box flexDirection="column">
+          <Box>
+            <Text bold>{action} </Text>
+            <Text color="cyan">{fileName}</Text>
+          </Box>
+          <Box marginTop={1}>
+            <DiffDisplay diffContent={diffContent} maxHeight={20} />
+          </Box>
+        </Box>
+      );
     }
 
     // For Bash commands, show the command

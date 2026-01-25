@@ -11,7 +11,6 @@ import { logToFile } from '../utils/debug.js';
 export function buildTestFeedbackMessage(
   events: Array<{ url: string; data: any }>,
   userFeedback: string,
-  attemptNumber: number,
 ): string {
   const eventSummary =
     events.length > 0
@@ -29,7 +28,7 @@ Data: ${JSON.stringify(aiAttrs, null, 2)}`;
         .join('\n\n')
       : 'No events received.';
 
-  return `# Integration Test Results (Attempt ${attemptNumber})
+  return `# Integration Test Results
 
 ## Events Collected
 
@@ -45,9 +44,7 @@ Analyze the events and user feedback, then fix the code to address any issues:
 1. Review the event data structure and user's comments
 2. Identify what's missing or incorrect
 3. Update the integration code to fix the problems
-4. The wizard will automatically retest after your fixes
-
-You have ${3 - attemptNumber} attempt(s) remaining.`;
+4. The wizard will automatically retest after your fixes`;
 }
 
 /**

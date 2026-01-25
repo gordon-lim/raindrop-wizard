@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { HistoryItem } from '../contexts/WizardContext.js';
+import type { HistoryItem, ReceivedEventData } from '../contexts/WizardContext.js';
 import { Logo } from './Logo.js';
 import { ToolCallDisplay } from './ToolCallDisplay.js';
 
@@ -121,21 +121,6 @@ export function HistoryItemDisplay({
         </Box>
       );
 
-    case 'confirm-result':
-      return (
-        <Box>
-          <Box>
-            <Text color="cyan">›</Text>
-            <Text> {item.text}</Text>
-          </Box>
-          {item.label && (
-            <Box marginLeft={1}>
-              <Text color="cyan">{item.label}</Text>
-            </Box>
-          )}
-        </Box>
-      );
-
     case 'spinner-result':
       return (
         <Box>
@@ -166,8 +151,7 @@ export function HistoryItemDisplay({
     case 'user-message':
       return (
         <Box>
-          <Text color="cyan">›</Text>
-          <Text> {item.text}</Text>
+          <Text backgroundColor="gray" color="white"> › {item.text} </Text>
         </Box>
       );
 
@@ -201,6 +185,16 @@ export function HistoryItemDisplay({
         </Box>
       );
 
+    case 'received-event':
+      if (item.receivedEvent) {
+        return <ReceivedEventDisplay event={item.receivedEvent} />;
+      }
+      return (
+        <Box>
+          <Text>{item.text}</Text>
+        </Box>
+      );
+
     default:
       return (
         <Box>
@@ -208,6 +202,61 @@ export function HistoryItemDisplay({
         </Box>
       );
   }
+}
+
+/**
+ * Truncate text to a maximum length with ellipsis
+ */
+function truncate(text: string | undefined, maxLength: number): string {
+  if (!text) return 'N/A';
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+}
+
+/**
+ * Display for received events from the API
+ */
+function ReceivedEventDisplay({
+  event,
+}: {
+  event: ReceivedEventData;
+}): React.ReactElement {
+  const eventUrl = `https://app.raindrop.ai/home?event=${event.id}`;
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Box>
+        <Text color="cyan">◆ </Text>
+        <Text bold color="cyan">{event.eventName}</Text>
+      </Box>
+      <Box marginLeft={2} flexDirection="column">
+        <Box>
+          <Text dimColor>Timestamp: </Text>
+          <Text>{event.timestamp || 'N/A'}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>Model: </Text>
+          <Text color="yellow">{event.model || 'N/A'}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>User: </Text>
+          <Text>{event.userId || 'N/A'}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>Input: </Text>
+          <Text color="green">{truncate(event.input, 80)}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>Output: </Text>
+          <Text color="white">{truncate(event.output, 80)}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>View: </Text>
+          <Text color="blue">{eventUrl}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
 }
 
 /**

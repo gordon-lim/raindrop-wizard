@@ -10,7 +10,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import ui from '../utils/ui.js';
 import { abort } from '../utils/clack-utils.js';
-import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -103,30 +102,6 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
       'Configure your API key in environment variables for deployment',
       'Start using raindrop.ai in your TypeScript application',
     ],
-  },
-
-  setup: async () => {
-    await addTestUrl({
-      filePattern: '**/*.{ts,tsx,js,jsx}',
-      ignorePatterns: ['node_modules/**', 'dist/**', '.next/**', 'build/**'],
-      searchPattern: 'new Raindrop({',
-      searchRegex: /new\s+Raindrop\s*\(\s*\{/g,
-      parameterName: 'endpoint',
-      testUrl: TEST_URL,
-      style: 'object',
-    });
-  },
-
-  cleanup: async () => {
-    await removeTestUrl({
-      filePattern: '**/*.{ts,tsx,js,jsx}',
-      ignorePatterns: ['node_modules/**', 'dist/**', '.next/**', 'build/**'],
-      searchPattern: 'new Raindrop({',
-      searchRegex: /new\s+Raindrop\s*\(\s*\{/g,
-      parameterName: 'endpoint',
-      testUrl: TEST_URL,
-      style: 'object',
-    });
   },
 };
 

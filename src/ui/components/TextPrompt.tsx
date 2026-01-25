@@ -46,11 +46,6 @@ export function TextPrompt({ options }: TextPromptProps): React.ReactElement {
       }
     }
 
-    addItem({
-      type: 'text-result',
-      text: options.message,
-      label: submittedValue || '(empty)',
-    });
     resolvePending(submittedValue);
   };
 

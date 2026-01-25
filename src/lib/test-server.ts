@@ -1,316 +1,166 @@
-import http from 'http';
 import Chalk from 'chalk';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
 import ui from '../utils/ui.js';
 import { logToFile } from '../utils/debug.js';
-import {
-  parseOtelTraces,
-  spanToSimpleFormat,
-  extractAIAttributes,
-} from './otel-parser.js';
 import { waitForUserKeyPress } from '../utils/clack-utils.js';
-import { TEST_PORT, TEST_URL } from './constants.js';
+import { EVENTS_LIST_ENDPOINT } from './constants.js';
 import { buildTestFeedbackMessage } from './agent-prompts.js';
-import { runAgentLoop, type AgentRunConfig } from './agent-interface.js';
-import type { FrameworkConfig } from './framework-config.js';
 import type { WizardOptions } from '../utils/types.js';
 
+const POLL_INTERVAL_MS = 2000;
+
 /**
- * JSON event format (legacy raindrop.ai event)
+ * Event format from the events list API
  */
-interface JsonEvent {
-  input?: unknown;
-  output?: unknown;
-  model?: string;
-  convo_id?: string;
-  event_id?: string;
-  user_id?: string;
-  is_pending?: boolean | string;
+interface ApiEvent {
+  id: string;
+  name?: string;
+  timestamp?: string;
+  receivedAt?: string;
+  userId?: string;
+  customEventId?: string;
+  properties?: Record<string, unknown>;
+  aiData?: {
+    input?: string;
+    output?: string;
+    model?: string;
+    convoId?: string | null;
+  };
+  topics?: unknown[];
+  inputAttachments?: unknown[];
+  outputAttachments?: unknown[];
+  signals?: unknown[];
+  errorSpans?: unknown[];
+  toolCalls?: unknown[];
+  toolCallNames?: string[];
   [key: string]: unknown;
 }
 
 /**
- * OTEL event format (parsed from protobuf)
- */
-interface OtelEvent {
-  format: 'otel';
-  spans: unknown[];
-  aiAttributes: Record<string, unknown>;
-}
-
-/**
- * Wrapper for received events with URL context
+ * Wrapper for received events
  */
 export interface ReceivedEvent {
   url: string;
-  data: JsonEvent | OtelEvent;
+  data: ApiEvent;
 }
 
 /**
- * Create an HTTP server to receive test events
+ * Fetch events from the API endpoint
  */
-function createTestServer(): {
-  server: http.Server;
-  getReceivedEvents: () => ReceivedEvent[];
-  close: () => void;
-} {
-  const eventsReceived: ReceivedEvent[] = [];
-
-  const server = http.createServer((req, res) => {
-    if (req.method === 'POST') {
-      const contentType = req.headers['content-type'] || '';
-      const isJson = contentType.includes('application/json');
-
-      const chunks: Buffer[] = [];
-
-      req.on('data', (chunk) => {
-        chunks.push(Buffer.from(chunk));
-      });
-
-      req.on('end', async () => {
-        try {
-          const buffer = Buffer.concat(chunks);
-
-          let event: JsonEvent | OtelEvent;
-
-          if (isJson) {
-            // JSON content-type = legacy raindrop.ai event format
-            const body = buffer.toString('utf-8');
-            const parsedJson = JSON.parse(body);
-
-            event = parsedJson;
-          } else {
-            // Binary protobuf = OTEL format
-            try {
-              const { spans } = await parseOtelTraces(
-                new Uint8Array(buffer),
-                contentType,
-              );
-
-              // Convert OTEL spans to event format
-              event = {
-                format: 'otel',
-                spans: spans.map(spanToSimpleFormat),
-                aiAttributes: extractAIAttributes(spans),
-              };
-            } catch (protobufError) {
-              // If protobuf parsing fails, store raw buffer
-              event = {
-                rawBuffer: buffer,
-                error:
-                  protobufError instanceof Error
-                    ? protobufError.message
-                    : String(protobufError),
-              };
-
-              ui.addItem({
-                type: 'warning',
-                text: chalk.yellow('Failed to parse as OTEL protobuf:') +
-                  '\n' +
-                  chalk.dim(
-                    protobufError instanceof Error
-                      ? protobufError.message
-                      : String(protobufError),
-                  ),
-              });
-            }
-          }
-
-          // Handle different event types - never auto-complete, always wait for user keypress
-          const isOtelTrace = 'format' in event && event.format === 'otel';
-
-          if (isOtelTrace) {
-            // OTEL protobuf format
-            const otelEvent = event as OtelEvent;
-            const hasSpans = otelEvent.spans && otelEvent.spans.length > 0;
-
-            if (hasSpans) {
-              // Has spans: add to list
-              eventsReceived.push({ url: req.url || '/', data: otelEvent });
-
-              ui.addItem({
-                type: 'response',
-                text: chalk.cyan(`\n━━━ OTEL Trace at ${req.url} ━━━`) +
-                  '\n' +
-                  chalk.dim(JSON.stringify(otelEvent, null, 2)) +
-                  '\n' +
-                  chalk.green(`✓ ${otelEvent.spans.length} span(s)`) +
-                  '\n' +
-                  chalk.yellow(
-                    `Continue interacting or press any key to talk to the agent...`,
-                  ),
-              });
-            } else {
-              // Empty OTEL trace: ignore and continue listening
-              ui.addItem({
-                type: 'response',
-                text: chalk.dim(`OTEL trace with 0 spans at ${req.url} - ignoring`),
-              });
-            }
-          } else {
-            // JSON event format: always add to list
-            const jsonEvent = event as JsonEvent;
-            eventsReceived.push({ url: req.url || '/', data: jsonEvent });
-
-            // Check if this is a completion event (for display only, don't auto-complete)
-            const isComplete =
-              jsonEvent.is_pending === false ||
-              jsonEvent.is_pending === 'false';
-
-            ui.addItem({
-              type: 'response',
-              text: chalk.cyan(`\n━━━ Event at ${req.url} ━━━`) +
-                '\n' +
-                chalk.dim(JSON.stringify(jsonEvent, null, 2)) +
-                '\n' +
-                (isComplete
-                  ? chalk.green(`Completion event (is_pending=false)`)
-                  : chalk.green(`Partial event (is_pending=true)`)) +
-                '\n' +
-                chalk.yellow(
-                  `Continue interacting or press any key to talk to the agent...`,
-                ),
-            });
-          }
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-        } catch (error) {
-          ui.addItem({
-            type: 'error',
-            text: chalk.red('Failed to parse request:') +
-              '\n' +
-              chalk.dim(
-                `Error: ${error instanceof Error ? error.message : String(error)
-                }`,
-              ),
-          });
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Failed to parse request body' }));
-        }
-      });
-    } else {
-      ui.addItem({
-        type: 'warning',
-        text: chalk.yellow('Non-POST request received:') +
-          '\n' +
-          chalk.dim(`Method: ${req.method}`) +
-          '\n' +
-          chalk.dim(`URL: ${req.url}`),
-      });
-      res.writeHead(404);
-      res.end();
+async function fetchEvents(accessToken: string): Promise<ApiEvent[]> {
+  try {
+    const response = await fetch(EVENTS_LIST_ENDPOINT, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-  });
-
-  return {
-    server,
-    getReceivedEvents: () => {
-      return eventsReceived;
-    },
-    close: () => {
-      server.close((err) => {
-        if (err) {
-          logToFile('Error closing test server:', err);
-        } else {
-          logToFile('Test server closed successfully');
-        }
-      });
-    },
-  };
+    // API returns an array of events directly
+    const events = (await response.json()) as ApiEvent[];
+    return events || [];
+  } catch (error) {
+    logToFile('Error fetching events:', error);
+    return [];
+  }
 }
 
 /**
- * Test the integration by waiting for events on a local test server
+ * Test the integration by polling the events list endpoint.
+ * Returns feedbackPrompt if user wants to retry, otherwise shouldRetry is false.
  */
 export async function testIntegration(
-  agentConfig: AgentRunConfig,
-  sessionId: string | undefined,
-  config: FrameworkConfig,
   options: WizardOptions,
-  attemptNumber: number,
-): Promise<{ sessionId?: string; shouldRetry: boolean }> {
-  const { server, close, getReceivedEvents } = createTestServer();
+  accessToken: string,
+): Promise<{ shouldRetry: boolean; feedbackPrompt?: string }> {
+  const receivedEvents: ReceivedEvent[] = [];
+  const seenEventIds = new Set<string>();
+  let isPolling = true;
 
-  try {
-    // Start the server
-    await new Promise<void>((resolve, reject) => {
-      server.listen(TEST_PORT, () => {
-        logToFile(`Test server listening on ${TEST_URL}`);
-        resolve();
-      });
-      server.on('error', reject);
-    });
+  // Add header to indicate start of testing phase
+  ui.addItem({ type: 'phase', text: '### Testing ###' });
 
-    ui.addItem({
-      type: 'step',
-      text: chalk.cyan(`\nTest your integration (Attempt ${attemptNumber}):`) +
-        '\n' +
-        chalk.dim(`Interact with your AI.`) +
-        '\n' +
-        chalk.dim('Events will appear below as they arrive...') +
-        '\n' +
-        chalk.yellow('Press any key when done testing...'),
-    });
+  const testSpinner = ui.spinner();
+  testSpinner.start(
+    chalk.cyan('Test your integration: ') +
+    chalk.dim('Interact with your AI. Events will appear below. ') +
+    chalk.yellow('Press any key when done testing...'),
+  );
 
-    // Wait for user to finish testing
-    await waitForUserKeyPress();
+  // Start polling in the background
+  const pollPromise = (async () => {
+    while (isPolling) {
+      const events = await fetchEvents(accessToken);
 
-    // Get all received events
-    const receivedEvents = getReceivedEvents();
+      for (const event of events) {
+        // Skip events we've already seen
+        if (event.id && seenEventIds.has(event.id)) {
+          continue;
+        }
 
-    // Ask if results look good
-    const resultsGood = await ui.select({
-      message: `Test attempt ${attemptNumber}: Do the results look good?`,
-      options: [
-        { value: true, label: 'Yes, looks good - proceed' },
-        { value: false, label: 'No, I need to provide feedback' },
-      ],
-    });
+        if (event.id) {
+          seenEventIds.add(event.id);
+        }
 
-    if (resultsGood) {
-      // User is satisfied
-      ui.addItem({ type: 'success', text: 'Integration test passed!' });
-      return { sessionId, shouldRetry: false };
+        receivedEvents.push({ url: EVENTS_LIST_ENDPOINT, data: event });
+
+        ui.addItem({
+          type: 'received-event',
+          text: event.name || 'unknown',
+          receivedEvent: {
+            id: event.id,
+            eventName: event.name || 'unknown',
+            timestamp: event.timestamp,
+            model: event.aiData?.model,
+            userId: event.userId,
+            input: event.aiData?.input,
+            output: event.aiData?.output,
+          },
+        });
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
+  })();
 
-    // User wants to provide feedback
-    const userFeedback = await ui.text({
-      message: 'Provide feedback on the issues:',
-      placeholder: 'e.g., "user_id is missing" or "wrong endpoint"',
-    });
+  // Wait for user to finish testing
+  await waitForUserKeyPress();
 
-    // Build feedback for agent
-    const feedback = buildTestFeedbackMessage(
-      receivedEvents,
-      userFeedback as string,
-      attemptNumber,
-    );
+  // Stop polling and spinner
+  isPolling = false;
+  testSpinner.stop();
+  // Let pollPromise finish in the background - no need to wait
 
-    // Run agent with feedback, resuming the previous session if we have a session ID
-    if (sessionId) {
-      const agentResult = await runAgentLoop(
-        agentConfig,
-        feedback,
-        options,
-        {
-          spinnerMessage: `Analyzing feedback and fixing issues (attempt ${attemptNumber})...`,
-          successMessage: `Agent completed fixes (attempt ${attemptNumber})`,
-          resume: sessionId,
-        },
-      );
-      return { sessionId: agentResult.sessionId, shouldRetry: true };
-    } else {
-      ui.addItem({
-        type: 'warning',
-        text: chalk.yellow('No session ID available, cannot continue testing'),
-      });
-      return { sessionId: undefined, shouldRetry: false };
-    }
-  } finally {
-    // Clean up server
-    close();
+  logToFile(`Polling stopped, received ${receivedEvents.length} events`);
+
+  // Ask if results look good
+  const resultsGood = await ui.select({
+    message: `Do the results look good?`,
+    options: [
+      { value: true, label: 'Yes, looks good - proceed' },
+      { value: false, label: 'No, I need to provide feedback' },
+    ],
+  });
+
+  if (resultsGood) {
+    return { shouldRetry: false };
   }
+
+  // User wants to provide feedback
+  const userFeedback = await ui.text({
+    message: 'Provide feedback on the issues:',
+    placeholder: 'e.g., "user_id is missing" or "wrong endpoint"',
+  });
+
+  // Build feedback prompt for agent
+  const feedbackPrompt = buildTestFeedbackMessage(
+    receivedEvents,
+    userFeedback as string,
+  );
+
+  return { shouldRetry: true, feedbackPrompt };
 }

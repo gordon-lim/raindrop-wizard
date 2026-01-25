@@ -15,13 +15,6 @@ export interface SelectOptions<T> {
   initialValue?: T;
 }
 
-export interface ConfirmOptions {
-  message: string;
-  active?: string;
-  inactive?: string;
-  initialValue?: boolean;
-}
-
 export interface TextOptions {
   message: string;
   placeholder?: string;

@@ -2,11 +2,10 @@ import type { WizardOptions } from '../utils/types.js';
 import type { FrameworkConfig } from '../lib/framework-config.js';
 import { enableDebugLogs } from '../utils/debug.js';
 import { runAgentWizard } from '../lib/agent-runner.js';
-import { Integration, TEST_URL } from '../lib/constants.js';
+import { Integration } from '../lib/constants.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -52,42 +51,6 @@ const PYTHON_AGENT_CONFIG: FrameworkConfig = {
       'Configure your API key in environment variables for deployment',
       'Start using raindrop.ai in your Python application',
     ],
-  },
-
-  setup: async () => {
-    await addTestUrl({
-      filePattern: '**/*.py',
-      ignorePatterns: [
-        'venv/**',
-        '.venv/**',
-        'env/**',
-        '__pycache__/**',
-        '*.pyc',
-      ],
-      searchPattern: 'raindrop.init(',
-      searchRegex: /raindrop\.init\(/g,
-      parameterName: 'api_url',
-      testUrl: TEST_URL,
-      style: 'function',
-    });
-  },
-
-  cleanup: async () => {
-    await removeTestUrl({
-      filePattern: '**/*.py',
-      ignorePatterns: [
-        'venv/**',
-        '.venv/**',
-        'env/**',
-        '__pycache__/**',
-        '*.pyc',
-      ],
-      searchPattern: 'raindrop.init(',
-      searchRegex: /raindrop\.init\(/g,
-      parameterName: 'api_url',
-      testUrl: TEST_URL,
-      style: 'function',
-    });
   },
 };
 

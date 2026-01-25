@@ -6,6 +6,7 @@
 import ui from '../utils/ui.js';
 import type { ToolApprovalResult, AgentQueryHandle } from '../ui/types.js';
 import { logToFile } from '../utils/debug.js';
+import { createTwoFilesPatch } from 'diff';
 
 // ============================================================================
 // Pending Tool Call Types
@@ -95,6 +96,26 @@ export function createAgentQueryHandle(deps: AgentQueryHandleDeps): AgentQueryHa
 // ============================================================================
 
 /**
+ * Generate a unified diff for Edit tool inputs (old_string -> new_string)
+ */
+function generateEditDiff(
+  filePath: string,
+  oldString: string,
+  newString: string,
+): string {
+  // createTwoFilesPatch generates a unified diff
+  return createTwoFilesPatch(
+    filePath,
+    filePath,
+    oldString,
+    newString,
+    '', // old header
+    '', // new header
+    { context: 3 }, // context lines
+  );
+}
+
+/**
  * Handle tool approval request by showing approval UI
  */
 async function handleToolApproval(
@@ -103,18 +124,42 @@ async function handleToolApproval(
 ): Promise<ToolApprovalResult> {
   logToFile('Showing tool approval UI:', { toolName, input });
 
+  // Extract file path
+  const fileName = typeof input.file_path === 'string'
+    ? input.file_path
+    : typeof input.path === 'string'
+      ? input.path
+      : undefined;
+
+  // Generate diff content for file modification tools
+  let diffContent: string | undefined;
+  if (
+    toolName === 'Edit' &&
+    typeof input.old_string === 'string' &&
+    typeof input.new_string === 'string' &&
+    fileName
+  ) {
+    // Edit: show old -> new diff
+    diffContent = generateEditDiff(fileName, input.old_string, input.new_string);
+  } else if (
+    toolName === 'Write' &&
+    typeof input.content === 'string' &&
+    fileName
+  ) {
+    // Write: show content as all additions (empty -> content)
+    diffContent = generateEditDiff(fileName, '', input.content);
+  } else if (typeof input.file_diff === 'string') {
+    // Use pre-generated diff if available
+    diffContent = input.file_diff;
+  }
+
   // Build props for the approval prompt
   const props = {
     toolName,
     input,
     description: typeof input.description === 'string' ? input.description : undefined,
-    // For file edits, extract diff and filename
-    diffContent: typeof input.file_diff === 'string' ? input.file_diff : undefined,
-    fileName: typeof input.file_path === 'string'
-      ? input.file_path
-      : typeof input.path === 'string'
-        ? input.path
-        : undefined,
+    diffContent,
+    fileName,
   };
 
   try {

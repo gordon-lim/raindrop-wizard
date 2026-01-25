@@ -42,7 +42,6 @@ jest.mock('@clack/prompts', () => ({
     error: jest.fn(),
   },
   text: jest.fn(),
-  confirm: jest.fn(),
   cancel: jest.fn(),
   outro: jest.fn(),
   // passthrough for abortIfCancelled

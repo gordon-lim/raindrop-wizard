@@ -15,7 +15,6 @@ import React, {
 import type {
   SelectOptions,
   TextOptions,
-  ConfirmOptions,
   SpinnerInstance,
   ToolApprovalProps,
   ToolApprovalResult,
@@ -42,13 +41,26 @@ export type HistoryItemType =
   | 'phase'
   | 'select-result'
   | 'text-result'
-  | 'confirm-result'
   | 'spinner-result'
   | 'tool-call'
   | 'agent-message'
   | 'user-message'
   | 'clarifying-questions-result'
-  | 'declined-questions';
+  | 'declined-questions'
+  | 'received-event';
+
+/**
+ * Data for received-event history items
+ */
+export interface ReceivedEventData {
+  id: string;
+  eventName: string;
+  timestamp?: string;
+  model?: string;
+  userId?: string;
+  input?: string;
+  output?: string;
+}
 
 /**
  * A completed item that goes into the Static history
@@ -67,6 +79,8 @@ export interface HistoryItem {
   toolCall?: ToolCallInfo;
   /** For clarifying-questions-result items, the Q&A pairs */
   questionsAndAnswers?: Array<{ question: string; answer: string }>;
+  /** For received-event items, the event data */
+  receivedEvent?: ReceivedEventData;
 }
 
 /**
@@ -80,7 +94,6 @@ export type HistoryItemInput = Omit<HistoryItem, 'id'>;
 export type PendingItemType =
   | 'select'
   | 'text'
-  | 'confirm'
   | 'spinner'
   | 'tool-approval'
   | 'clarifying-questions'
@@ -99,7 +112,6 @@ export interface SpinnerProps {
 export type PendingItemProps =
   | SelectOptions<unknown>
   | TextOptions
-  | ConfirmOptions
   | SpinnerProps
   | ToolApprovalProps
   | ClarifyingQuestionsProps
@@ -158,9 +170,6 @@ export interface WizardActions {
 
   /** Display a text input prompt and return the entered value */
   text: (options: TextOptions) => Promise<string | symbol>;
-
-  /** Display a confirm prompt and return the boolean result */
-  confirm: (options: ConfirmOptions) => Promise<boolean | symbol>;
 
   /** Display a spinner and return control methods */
   spinner: () => SpinnerInstance;
@@ -330,20 +339,6 @@ export function WizardProvider({
     [],
   );
 
-  // Show confirm prompt
-  const confirm = useCallback(
-    (options: ConfirmOptions): Promise<boolean | symbol> => {
-      return new Promise((resolve) => {
-        setPendingItem({
-          type: 'confirm',
-          props: options,
-          resolve: resolve as (value: unknown) => void,
-        });
-      });
-    },
-    [],
-  );
-
   // Spinner ref to manage spinner state
   const spinnerResolve = useRef<((value: unknown) => void) | null>(null);
 
@@ -504,7 +499,6 @@ export function WizardProvider({
       addItem,
       select,
       text,
-      confirm,
       spinner,
       resolvePending,
       exit,
@@ -518,7 +512,6 @@ export function WizardProvider({
       addItem,
       select,
       text,
-      confirm,
       spinner,
       resolvePending,
       exit,
