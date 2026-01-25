@@ -13,7 +13,7 @@ import {
 import { waitForUserKeyPress } from '../utils/clack-utils.js';
 import { TEST_PORT, TEST_URL } from './constants.js';
 import { buildTestFeedbackMessage } from './agent-prompts.js';
-import { runAgent, type AgentRunConfig } from './agent-interface.js';
+import { runAgentLoop, type AgentRunConfig } from './agent-interface.js';
 import type { FrameworkConfig } from './framework-config.js';
 import type { WizardOptions } from '../utils/types.js';
 
@@ -230,7 +230,6 @@ export async function testIntegration(
   sessionId: string | undefined,
   config: FrameworkConfig,
   options: WizardOptions,
-  spinner: any,
   attemptNumber: number,
 ): Promise<{ sessionId?: string; shouldRetry: boolean }> {
   const { server, close, getReceivedEvents } = createTestServer();
@@ -292,15 +291,13 @@ export async function testIntegration(
 
     // Run agent with feedback, resuming the previous session if we have a session ID
     if (sessionId) {
-      const agentResult = await runAgent(
+      const agentResult = await runAgentLoop(
         agentConfig,
         feedback,
         options,
-        spinner,
         {
           spinnerMessage: `Analyzing feedback and fixing issues (attempt ${attemptNumber})...`,
           successMessage: `Agent completed fixes (attempt ${attemptNumber})`,
-          errorMessage: 'Failed to process feedback',
           resume: sessionId,
         },
       );

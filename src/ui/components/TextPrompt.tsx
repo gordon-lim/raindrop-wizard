@@ -56,8 +56,8 @@ export function TextPrompt({ options }: TextPromptProps): React.ReactElement {
 
   return (
     <PromptContainer>
-      <Text>{options.message}</Text>
-      <Box marginTop={1}>
+      {options.message && <Text>{options.message}</Text>}
+      <Box marginTop={options.message ? 1 : 0}>
         <Text color="cyan">› </Text>
         <TextInput
           value={value}

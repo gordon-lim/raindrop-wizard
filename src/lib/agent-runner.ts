@@ -13,7 +13,7 @@ import { writeApiKeyToEnv } from '../utils/environment.js';
 import fs from 'fs';
 import path from 'path';
 import ui from '../utils/ui.js';
-import { initializeAgent, runAgent } from './agent-interface.js';
+import { initializeAgent, runAgentLoop } from './agent-interface.js';
 import { logToFile, LOG_FILE_PATH, debug } from '../utils/debug.js';
 import Chalk from 'chalk';
 
@@ -104,16 +104,13 @@ export async function runAgentWizard(
     // Add header to indicate start of interactive agent phase
     ui.addItem({ type: 'phase', text: '### Agent ###' });
     // Run agent to do the integration
-    const agentResult = await runAgent(
+    const agentResult = await runAgentLoop(
       agent,
       integrationPrompt,
       options,
-      spinner,
       {
         spinnerMessage: SPINNER_MESSAGE,
         successMessage: config.ui.successMessage,
-        errorMessage: 'Integration failed',
-        streamingInput: true, // Enable persistent text input for user interaction
       },
     );
 
@@ -146,7 +143,6 @@ export async function runAgentWizard(
           currentSessionId,
           config,
           options,
-          spinner,
           attemptNumber,
         );
 

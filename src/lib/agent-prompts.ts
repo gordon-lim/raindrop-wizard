@@ -114,39 +114,7 @@ export async function buildIntegrationPrompt(
       '   - The project uses TypeScript SDKs like openai, @anthropic-ai/sdk, @google/generative-ai, litellm, etc. to make LLM API calls';
   }
 
-  // TODO: Remove this test prompt
-  const testAskUserQuestion = `
-IMPORTANT: Before doing anything else, you MUST call the AskUserQuestion tool with these exact questions:
-{
-  "questions": [
-    {
-      "question": "How should I format the output?",
-      "header": "Format",
-      "options": [
-        { "label": "Summary", "description": "Brief overview" },
-        { "label": "Detailed", "description": "Full explanation" }
-      ],
-      "multiSelect": false
-    },
-    {
-      "question": "Which sections should I include?",
-      "header": "Sections",
-      "options": [
-        { "label": "Introduction", "description": "Opening context" },
-        { "label": "Conclusion", "description": "Final summary" }
-      ],
-      "multiSelect": true
-    }
-  ]
-}
-
-After getting the user's answers, proceed with the integration below.
-
----
-
-`;
-
-  return `${testAskUserQuestion}Integrate raindrop.ai into this ${frameworkName} project that makes calls to LLM APIs.
+  return `Integrate raindrop.ai into this ${frameworkName} project that makes calls to LLM APIs.
 
 Project context:
 - Framework: ${frameworkName} ${frameworkVersion}
@@ -187,6 +155,23 @@ ${sdkDescription}
 
 Focus on files where LLM API calls are made - these are the files that need to be modified to
 integrate raindrop.ai. ${docsSection}
+
+## Signaling Completion
+
+CRITICAL: After you have completed all integration steps, you MUST call the CompleteIntegration
+tool to signal that you're done.
+
+The CompleteIntegration tool is available to you. Call it with an empty object:
+- Tool: CompleteIntegration
+- Input: {} (empty)
+
+Do NOT call this tool until you have:
+1. Successfully installed the raindrop.ai package
+2. Integrated raindrop.ai into all relevant LLM API call sites
+3. Verified the project builds/runs without errors
+
+Once you call CompleteIntegration, the wizard will automatically transition to the testing phase
+where the integration will be validated.
 
 ## Testing & Verification
 

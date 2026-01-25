@@ -3,6 +3,7 @@
  * Shown during agent execution when no approval prompt is active.
  * Allows users to send follow-up messages or interrupt the agent.
  * Includes a spinner to show the agent is working.
+ * TODO: Unify with TextPrompt component
  */
 
 import React, { useState } from 'react';
