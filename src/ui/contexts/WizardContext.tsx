@@ -17,6 +17,13 @@ import type {
   TextOptions,
   ConfirmOptions,
   SpinnerInstance,
+  ToolApprovalProps,
+  ToolApprovalResult,
+  ClarifyingQuestionsProps,
+  ClarifyingQuestionsResult,
+  PersistentInputProps,
+  ToolCallInfo,
+  AgentQueryHandle,
 } from '../types.js';
 
 /**
@@ -24,19 +31,24 @@ import type {
  */
 export type HistoryItemType =
   | 'logo'
-  | 'intro'
   | 'outro'
   | 'note'
   | 'cancel'
-  | 'log-info'
-  | 'log-warn'
-  | 'log-error'
-  | 'log-success'
-  | 'log-step'
+  | 'response'
+  | 'warning'
+  | 'error'
+  | 'success'
+  | 'step'
+  | 'phase'
   | 'select-result'
   | 'text-result'
   | 'confirm-result'
-  | 'spinner-result';
+  | 'spinner-result'
+  | 'tool-call'
+  | 'agent-message'
+  | 'user-message'
+  | 'clarifying-questions-result'
+  | 'declined-questions';
 
 /**
  * A completed item that goes into the Static history
@@ -44,35 +56,80 @@ export type HistoryItemType =
 export interface HistoryItem {
   id: number;
   type: HistoryItemType;
-  content: string;
+  text: string;
   /** Optional secondary content (e.g., selected option label) */
   label?: string;
   /** Optional hint/description */
   hint?: string;
   /** Title for note items */
   title?: string;
+  /** For tool-call items, the tool call info */
+  toolCall?: ToolCallInfo;
+  /** For clarifying-questions-result items, the Q&A pairs */
+  questionsAndAnswers?: Array<{ question: string; answer: string }>;
 }
+
+/**
+ * Input type for adding history items (without id)
+ */
+export type HistoryItemInput = Omit<HistoryItem, 'id'>;
 
 /**
  * Types of pending prompts that can be active
  */
-export type PendingItemType = 'select' | 'text' | 'confirm' | 'spinner';
-
-/**
- * A pending item represents an active prompt or spinner
- */
-export interface PendingItem {
-  type: PendingItemType;
-  props: SelectOptions<unknown> | TextOptions | ConfirmOptions | SpinnerProps;
-  resolve: (value: unknown) => void;
-  reject?: (error: Error) => void;
-}
+export type PendingItemType =
+  | 'select'
+  | 'text'
+  | 'confirm'
+  | 'spinner'
+  | 'tool-approval'
+  | 'clarifying-questions'
+  | 'persistent-input';
 
 /**
  * Spinner-specific props
  */
 export interface SpinnerProps {
   message: string;
+}
+
+/**
+ * All possible pending item props
+ */
+export type PendingItemProps =
+  | SelectOptions<unknown>
+  | TextOptions
+  | ConfirmOptions
+  | SpinnerProps
+  | ToolApprovalProps
+  | ClarifyingQuestionsProps
+  | PersistentInputProps;
+
+/**
+ * A pending item represents an active prompt or spinner
+ */
+export interface PendingItem {
+  type: PendingItemType;
+  props: PendingItemProps;
+  resolve: (value: unknown) => void;
+  reject?: (error: Error) => void;
+}
+
+/**
+ * Agent execution state
+ */
+export interface AgentState {
+  /** Whether an agent is currently running */
+  isRunning: boolean;
+  /** Session ID for resuming */
+  sessionId?: string;
+  /** Handle to control the running agent */
+  queryHandle?: AgentQueryHandle;
+  /** Callbacks to restore persistent input after approval prompts */
+  persistentInputCallbacks?: {
+    onSubmit: (message: string) => void;
+    onInterrupt: () => void;
+  };
 }
 
 /**
@@ -85,28 +142,28 @@ export interface WizardState {
   pendingItem: PendingItem | null;
   /** Whether the app is ready to exit */
   shouldExit: boolean;
+  /** Agent execution state */
+  agentState: AgentState;
 }
 
 /**
  * Actions to modify wizard state
  */
 export interface WizardActions {
-  /** Add an item to history */
-  addHistoryItem: (
-    item: Omit<HistoryItem, 'id'>,
-  ) => void;
+  /** Add an item to history (like gemini-cli's addItem) */
+  addItem: (item: HistoryItemInput) => void;
 
   /** Display a select prompt and return the selected value */
-  showSelect: <T>(options: SelectOptions<T>) => Promise<T | symbol>;
+  select: <T>(options: SelectOptions<T>) => Promise<T | symbol>;
 
   /** Display a text input prompt and return the entered value */
-  showText: (options: TextOptions) => Promise<string | symbol>;
+  text: (options: TextOptions) => Promise<string | symbol>;
 
   /** Display a confirm prompt and return the boolean result */
-  showConfirm: (options: ConfirmOptions) => Promise<boolean | symbol>;
+  confirm: (options: ConfirmOptions) => Promise<boolean | symbol>;
 
   /** Display a spinner and return control methods */
-  showSpinner: () => SpinnerInstance;
+  spinner: () => SpinnerInstance;
 
   /** Resolve the current pending item with a value */
   resolvePending: (value: unknown) => void;
@@ -114,23 +171,43 @@ export interface WizardActions {
   /** Mark the app as ready to exit */
   exit: () => void;
 
-  /** Log functions that add to history */
-  log: {
-    info: (msg: string) => void;
-    warn: (msg: string) => void;
-    error: (msg: string) => void;
-    success: (msg: string) => void;
-    step: (msg: string) => void;
-  };
+  // ========================================================================
+  // Agent-related actions
+  // ========================================================================
 
-  /** Message functions */
-  intro: (message: string) => void;
-  outro: (message: string) => void;
-  note: (message: string, title?: string) => void;
-  cancel: (message?: string) => void;
+  /**
+   * Show tool approval prompt (replaces persistent-input, restores after)
+   * Used by canUseTool handler for tools that need user approval
+   */
+  toolApproval: (props: ToolApprovalProps) => Promise<ToolApprovalResult>;
 
-  /** Display the logo */
-  showLogo: () => void;
+  /**
+   * Show clarifying questions prompt (replaces persistent-input, restores after)
+   * Used by canUseTool handler for AskUserQuestion tool
+   */
+  clarifyingQuestions: (
+    props: ClarifyingQuestionsProps,
+  ) => Promise<ClarifyingQuestionsResult>;
+
+  /**
+   * Start persistent input mode during agent execution
+   * Sets pendingItem to persistent-input type
+   */
+  startPersistentInput: (callbacks: {
+    onSubmit: (message: string) => void;
+    onInterrupt: () => void;
+  }) => void;
+
+  /**
+   * Stop persistent input mode
+   * Clears pendingItem if it's persistent-input type
+   */
+  stopPersistentInput: () => void;
+
+  /**
+   * Update agent state
+   */
+  setAgentState: (state: Partial<AgentState>) => void;
 }
 
 /**
@@ -188,18 +265,28 @@ export function WizardProvider({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [pendingItem, setPendingItem] = useState<PendingItem | null>(null);
   const [shouldExit, setShouldExit] = useState(false);
+  const [agentState, setAgentStateInternal] = useState<AgentState>({
+    isRunning: false,
+  });
 
   // Counter for unique IDs
   const idCounter = useRef(0);
+
+  // Ref for persistent input callbacks and config (immediately available, no state delay)
+  const persistentInputConfigRef = useRef<{
+    onSubmit: (message: string) => void;
+    onInterrupt: () => void;
+    spinnerMessage?: string;
+  } | null>(null);
 
   // Get next unique ID
   const getNextId = useCallback(() => {
     return ++idCounter.current;
   }, []);
 
-  // Add item to history
-  const addHistoryItem = useCallback(
-    (item: Omit<HistoryItem, 'id'>) => {
+  // Add item to history (direct, like gemini-cli)
+  const addItem = useCallback(
+    (item: HistoryItemInput) => {
       setHistory((prev) => [...prev, { ...item, id: getNextId() }]);
     },
     [getNextId],
@@ -216,7 +303,7 @@ export function WizardProvider({
   }, []);
 
   // Show select prompt
-  const showSelect = useCallback(
+  const select = useCallback(
     <T,>(options: SelectOptions<T>): Promise<T | symbol> => {
       return new Promise((resolve) => {
         setPendingItem({
@@ -230,18 +317,21 @@ export function WizardProvider({
   );
 
   // Show text prompt
-  const showText = useCallback((options: TextOptions): Promise<string | symbol> => {
-    return new Promise((resolve) => {
-      setPendingItem({
-        type: 'text',
-        props: options,
-        resolve: resolve as (value: unknown) => void,
+  const text = useCallback(
+    (options: TextOptions): Promise<string | symbol> => {
+      return new Promise((resolve) => {
+        setPendingItem({
+          type: 'text',
+          props: options,
+          resolve: resolve as (value: unknown) => void,
+        });
       });
-    });
-  }, []);
+    },
+    [],
+  );
 
   // Show confirm prompt
-  const showConfirm = useCallback(
+  const confirm = useCallback(
     (options: ConfirmOptions): Promise<boolean | symbol> => {
       return new Promise((resolve) => {
         setPendingItem({
@@ -256,13 +346,11 @@ export function WizardProvider({
 
   // Spinner ref to manage spinner state
   const spinnerResolve = useRef<((value: unknown) => void) | null>(null);
-  const spinnerMessage = useRef<string>('');
 
   // Show spinner
-  const showSpinner = useCallback((): SpinnerInstance => {
+  const spinner = useCallback((): SpinnerInstance => {
     return {
       start: (msg = '') => {
-        spinnerMessage.current = msg;
         setPendingItem({
           type: 'spinner',
           props: { message: msg },
@@ -273,12 +361,11 @@ export function WizardProvider({
       },
       stop: (msg = '') => {
         if (msg) {
-          addHistoryItem({ type: 'spinner-result', content: msg });
+          addItem({ type: 'spinner-result', text: msg });
         }
         setPendingItem(null);
       },
       message: (msg: string) => {
-        spinnerMessage.current = msg;
         setPendingItem((current) => {
           if (current?.type === 'spinner') {
             return {
@@ -290,7 +377,7 @@ export function WizardProvider({
         });
       },
     };
-  }, [addHistoryItem]);
+  }, [addItem]);
 
   // Exit the app
   const exit = useCallback(() => {
@@ -298,78 +385,148 @@ export function WizardProvider({
     onExit?.();
   }, [onExit]);
 
-  // Log functions
-  const log = useMemo(
-    () => ({
-      info: (msg: string) => addHistoryItem({ type: 'log-info', content: msg }),
-      warn: (msg: string) => addHistoryItem({ type: 'log-warn', content: msg }),
-      error: (msg: string) => addHistoryItem({ type: 'log-error', content: msg }),
-      success: (msg: string) => addHistoryItem({ type: 'log-success', content: msg }),
-      step: (msg: string) => addHistoryItem({ type: 'log-step', content: msg }),
-    }),
-    [addHistoryItem],
+  // ========================================================================
+  // Agent-related actions
+  // ========================================================================
+
+  // Helper to restore persistent input after approval/questions prompts
+  const restorePersistentInput = useCallback(() => {
+    const config = persistentInputConfigRef.current;
+    if (config) {
+      setPendingItem({
+        type: 'persistent-input',
+        props: {
+          onSubmit: config.onSubmit,
+          onInterrupt: config.onInterrupt,
+          placeholder: 'Type a message or press Esc to interrupt...',
+          spinnerMessage: config.spinnerMessage,
+        } as PersistentInputProps,
+        resolve: () => {},
+      });
+    }
+  }, []);
+
+  // Show tool approval prompt
+  const toolApproval = useCallback(
+    (props: ToolApprovalProps): Promise<ToolApprovalResult> => {
+      return new Promise((resolve) => {
+        setPendingItem({
+          type: 'tool-approval',
+          props,
+          resolve: (result) => {
+            // Restore persistent input after user responds
+            restorePersistentInput();
+            resolve(result as ToolApprovalResult);
+          },
+        });
+      });
+    },
+    [restorePersistentInput],
   );
 
-  // Message functions
-  const intro = useCallback(
-    (message: string) => addHistoryItem({ type: 'intro', content: message }),
-    [addHistoryItem],
+  // Show clarifying questions prompt
+  const clarifyingQuestions = useCallback(
+    (props: ClarifyingQuestionsProps): Promise<ClarifyingQuestionsResult> => {
+      return new Promise((resolve) => {
+        setPendingItem({
+          type: 'clarifying-questions',
+          props,
+          resolve: (result) => {
+            // Restore persistent input after user responds
+            restorePersistentInput();
+            resolve(result as ClarifyingQuestionsResult);
+          },
+        });
+      });
+    },
+    [restorePersistentInput],
   );
 
-  const outro = useCallback(
-    (message: string) => addHistoryItem({ type: 'outro', content: message }),
-    [addHistoryItem],
+  // Start persistent input mode
+  const startPersistentInput = useCallback(
+    (config: {
+      onSubmit: (message: string) => void;
+      onInterrupt: () => void;
+      spinnerMessage?: string;
+    }) => {
+      // Store config in ref for immediate access during restoration
+      persistentInputConfigRef.current = config;
+
+      // Also store callbacks in state for external access if needed
+      setAgentStateInternal((current) => ({
+        ...current,
+        persistentInputCallbacks: {
+          onSubmit: config.onSubmit,
+          onInterrupt: config.onInterrupt,
+        },
+      }));
+
+      setPendingItem({
+        type: 'persistent-input',
+        props: {
+          onSubmit: config.onSubmit,
+          onInterrupt: config.onInterrupt,
+          placeholder: 'Type a message or press Esc to interrupt...',
+          spinnerMessage: config.spinnerMessage,
+        } as PersistentInputProps,
+        resolve: () => {},
+      });
+    },
+    [],
   );
 
-  const note = useCallback(
-    (message: string, title?: string) =>
-      addHistoryItem({ type: 'note', content: message, title }),
-    [addHistoryItem],
-  );
+  // Stop persistent input mode
+  const stopPersistentInput = useCallback(() => {
+    // Clear the ref
+    persistentInputConfigRef.current = null;
 
-  const cancelMsg = useCallback(
-    (message = 'Operation cancelled') =>
-      addHistoryItem({ type: 'cancel', content: message }),
-    [addHistoryItem],
-  );
+    setPendingItem((current) => {
+      if (current?.type === 'persistent-input') {
+        return null;
+      }
+      return current;
+    });
 
-  // Show logo
-  const showLogo = useCallback(
-    () => addHistoryItem({ type: 'logo', content: '' }),
-    [addHistoryItem],
-  );
+    setAgentStateInternal((current) => ({
+      ...current,
+      persistentInputCallbacks: undefined,
+    }));
+  }, []);
+
+  // Update agent state
+  const setAgentState = useCallback((state: Partial<AgentState>) => {
+    setAgentStateInternal((current) => ({ ...current, ...state }));
+  }, []);
 
   // Combine actions
   const actions = useMemo<WizardActions>(
     () => ({
-      addHistoryItem,
-      showSelect,
-      showText,
-      showConfirm,
-      showSpinner,
+      addItem,
+      select,
+      text,
+      confirm,
+      spinner,
       resolvePending,
       exit,
-      log,
-      intro,
-      outro,
-      note,
-      cancel: cancelMsg,
-      showLogo,
+      toolApproval,
+      clarifyingQuestions,
+      startPersistentInput,
+      stopPersistentInput,
+      setAgentState,
     }),
     [
-      addHistoryItem,
-      showSelect,
-      showText,
-      showConfirm,
-      showSpinner,
+      addItem,
+      select,
+      text,
+      confirm,
+      spinner,
       resolvePending,
       exit,
-      log,
-      intro,
-      outro,
-      note,
-      cancelMsg,
-      showLogo,
+      toolApproval,
+      clarifyingQuestions,
+      startPersistentInput,
+      stopPersistentInput,
+      setAgentState,
     ],
   );
 
@@ -379,8 +536,9 @@ export function WizardProvider({
       history,
       pendingItem,
       shouldExit,
+      agentState,
     }),
-    [history, pendingItem, shouldExit],
+    [history, pendingItem, shouldExit, agentState],
   );
 
   // Context value

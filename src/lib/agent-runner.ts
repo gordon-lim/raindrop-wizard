@@ -1,5 +1,4 @@
 import {
-  getWelcomeMessage,
   SPINNER_MESSAGE,
   type FrameworkConfig,
 } from './framework-config.js';
@@ -9,12 +8,11 @@ import {
   abort,
   askForAIConsent,
   confirmContinueIfNoOrDirtyGitRepo,
-  printWelcome,
 } from '../utils/clack-utils.js';
 import { writeApiKeyToEnv } from '../utils/environment.js';
 import fs from 'fs';
 import path from 'path';
-import clack from '../utils/ui.js';
+import ui from '../utils/ui.js';
 import { initializeAgent, runAgent } from './agent-interface.js';
 import { logToFile, LOG_FILE_PATH, debug } from '../utils/debug.js';
 import Chalk from 'chalk';
@@ -36,12 +34,6 @@ export async function runAgentWizard(
   options: WizardOptions,
 ): Promise<void> {
   // Setup phase
-  printWelcome({ wizardName: getWelcomeMessage(config.metadata.name) });
-
-  clack.log.info(
-    `🧙 The wizard has chosen you to try the next-generation agent integration for ${config.metadata.name}.\n\nStand by for the good stuff, and let the robot minders know how it goes: wizard@raindrop.ai\n`,
-  );
-
   const aiConsent = await askForAIConsent(options);
   if (!aiConsent) {
     abort(
@@ -70,8 +62,7 @@ export async function runAgentWizard(
         error,
       );
       debug(
-        `Skipping package.json: ${
-          error instanceof Error ? error.message : String(error)
+        `Skipping package.json: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     }
@@ -83,7 +74,7 @@ export async function runAgentWizard(
 
   await writeApiKeyToEnv(apiKey, options.installDir);
 
-  clack.log.success('API key retrieved and saved to .env');
+  ui.addItem({ type: 'success', text: 'I retrieved your API key and saved it to .env' });
 
   const frameworkVersion = config.detection.getVersion(packageJson);
 
@@ -93,12 +84,12 @@ export async function runAgentWizard(
   });
 
   if (options.debug) {
-    clack.log.info(`Integration prompt logged to: ${LOG_FILE_PATH}`);
-    clack.log.info(`Prompt preview: ${integrationPrompt.substring(0, 200)}...`);
+    ui.addItem({ type: 'response', text: `Integration prompt logged to: ${LOG_FILE_PATH}` });
+    ui.addItem({ type: 'response', text: `Prompt preview: ${integrationPrompt.substring(0, 200)}...` });
   }
 
   // Initialize and run agent
-  const spinner = clack.spinner();
+  const spinner = ui.spinner();
 
   const agent = initializeAgent(
     {
@@ -109,17 +100,20 @@ export async function runAgentWizard(
 
   // Use try-finally to ensure cleanup always runs, even if setup or test fails
   try {
+
+    // Add header to indicate start of interactive agent phase
+    ui.addItem({ type: 'phase', text: '### Agent ###' });
     // Run agent to do the integration
-    const sessionId = await runAgent(
+    const agentResult = await runAgent(
       agent,
       integrationPrompt,
       options,
       spinner,
       {
-        estimatedDurationMinutes: config.ui.estimatedDurationMinutes,
         spinnerMessage: SPINNER_MESSAGE,
         successMessage: config.ui.successMessage,
         errorMessage: 'Integration failed',
+        streamingInput: true, // Enable persistent text input for user interaction
       },
     );
 
@@ -139,7 +133,7 @@ export async function runAgentWizard(
     // Test loop: continue until user says it's good or max attempts
     // TODO: Enable test integration for vercelaisdk once implemented
     if (config.metadata.integration !== Integration.vercelAiSdk) {
-      let currentSessionId = sessionId;
+      let currentSessionId = agentResult.sessionId;
       let attemptNumber = 0;
       let shouldContinue = true;
       const MAX_ATTEMPTS = 3;
@@ -161,11 +155,12 @@ export async function runAgentWizard(
       }
 
       if (attemptNumber >= MAX_ATTEMPTS && shouldContinue) {
-        clack.log.warn(
-          chalk.yellow(
+        ui.addItem({
+          type: 'warning',
+          text: chalk.yellow(
             'Maximum test attempts (3) reached. Proceeding with current state.',
           ),
-        );
+        });
       }
     }
   } finally {
@@ -198,8 +193,8 @@ ${nextSteps.map((step) => `• ${step}`).join('\n')}
 
 Learn more: ${chalk.cyan(config.metadata.docsUrl)}
 ${chalk.dim(
-  'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
-)}`;
+    'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
+  )}`;
 
-  clack.outro(outroMessage);
+  ui.addItem({ type: 'outro', text: outroMessage });
 }

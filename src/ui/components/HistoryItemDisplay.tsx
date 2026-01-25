@@ -7,6 +7,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { HistoryItem } from '../contexts/WizardContext.js';
 import { Logo } from './Logo.js';
+import { ToolCallDisplay } from './ToolCallDisplay.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -22,70 +23,69 @@ export function HistoryItemDisplay({
     case 'logo':
       return <Logo />;
 
-    case 'intro':
-      return (
-        <Box>
-          <Text color="white">●</Text>
-          <Text> {item.content}</Text>
-        </Box>
-      );
-
     case 'outro':
       return (
         <Box>
           <Text dimColor>└─</Text>
-          <Text> {item.content}</Text>
+          <Text> {item.text}</Text>
         </Box>
       );
 
     case 'note':
-      return <NoteDisplay content={item.content} title={item.title} />;
+      return <NoteDisplay text={item.text} title={item.title} />;
 
     case 'cancel':
       return (
         <Box>
           <Text color="red">●</Text>
-          <Text color="red"> {item.content}</Text>
+          <Text color="red"> {item.text}</Text>
         </Box>
       );
 
-    case 'log-info':
+    case 'response':
       return (
         <Box>
           <Text color="white">●</Text>
-          <Text dimColor> {item.content}</Text>
+          <Text color="white"> {item.text}</Text>
         </Box>
       );
 
-    case 'log-warn':
+    case 'warning':
       return (
         <Box>
           <Text color="yellow">●</Text>
-          <Text color="yellow"> {item.content}</Text>
+          <Text color="yellow"> {item.text}</Text>
         </Box>
       );
 
-    case 'log-error':
+    case 'error':
       return (
         <Box>
           <Text color="red">●</Text>
-          <Text color="red"> {item.content}</Text>
+          <Text color="red"> {item.text}</Text>
         </Box>
       );
 
-    case 'log-success':
+    case 'success':
       return (
         <Box>
           <Text color="green">●</Text>
-          <Text> {item.content}</Text>
+          <Text> {item.text}</Text>
         </Box>
       );
 
-    case 'log-step':
+    case 'step':
       return (
         <Box>
           <Text color="white">●</Text>
-          <Text> {item.content}</Text>
+          <Text> {item.text}</Text>
+        </Box>
+      );
+
+    case 'phase':
+      return (
+        <Box>
+          <Text backgroundColor="#C6C7FF">{item.text}</Text>
         </Box>
       );
 
@@ -94,7 +94,7 @@ export function HistoryItemDisplay({
         <Box flexDirection="column">
           <Box>
             <Text color="cyan">›</Text>
-            <Text> {item.content}</Text>
+            <Text> {item.text}</Text>
           </Box>
           {item.label && (
             <Box marginLeft={2}>
@@ -110,7 +110,7 @@ export function HistoryItemDisplay({
         <Box flexDirection="column">
           <Box>
             <Text color="cyan">›</Text>
-            <Text> {item.content}</Text>
+            <Text> {item.text}</Text>
           </Box>
           {item.label && (
             <Box marginLeft={2}>
@@ -126,7 +126,7 @@ export function HistoryItemDisplay({
         <Box>
           <Box>
             <Text color="cyan">›</Text>
-            <Text> {item.content}</Text>
+            <Text> {item.text}</Text>
           </Box>
           {item.label && (
             <Box marginLeft={1}>
@@ -140,14 +140,71 @@ export function HistoryItemDisplay({
       return (
         <Box>
           <Text color="green">✓</Text>
-          <Text> {item.content}</Text>
+          <Text> {item.text}</Text>
+        </Box>
+      );
+
+    case 'tool-call':
+      if (item.toolCall) {
+        return <ToolCallDisplay toolCall={item.toolCall} />;
+      }
+      return (
+        <Box>
+          <Text color="cyan">●</Text>
+          <Text> {item.text}</Text>
+        </Box>
+      );
+
+    case 'agent-message':
+      return (
+        <Box>
+          <Text color="magenta">◆</Text>
+          <Text> {item.text}</Text>
+        </Box>
+      );
+
+    case 'user-message':
+      return (
+        <Box>
+          <Text color="cyan">›</Text>
+          <Text> {item.text}</Text>
+        </Box>
+      );
+
+    case 'clarifying-questions-result':
+      return (
+        <Box flexDirection="column">
+          <Box>
+            <Text color="white">● </Text>
+            <Text>{item.text}</Text>
+          </Box>
+          {item.questionsAndAnswers && item.questionsAndAnswers.map((qa, i) => {
+            const isLast = i === item.questionsAndAnswers!.length - 1;
+            const prefix = isLast ? '└' : '├';
+            return (
+              <Box key={i} marginLeft={2}>
+                <Text dimColor>{prefix} · </Text>
+                <Text>{qa.question}</Text>
+                <Text dimColor> → </Text>
+                <Text color="green">{qa.answer}</Text>
+              </Box>
+            );
+          })}
+        </Box>
+      );
+
+    case 'declined-questions':
+      return (
+        <Box>
+          <Text color="yellow">⏺ </Text>
+          <Text>{item.text}</Text>
         </Box>
       );
 
     default:
       return (
         <Box>
-          <Text>{item.content}</Text>
+          <Text>{item.text}</Text>
         </Box>
       );
   }
@@ -157,13 +214,13 @@ export function HistoryItemDisplay({
  * Note display with optional title and tree-style formatting
  */
 function NoteDisplay({
-  content,
+  text,
   title,
 }: {
-  content: string;
+  text: string;
   title?: string;
 }): React.ReactElement {
-  const lines = content.split('\n');
+  const lines = text.split('\n');
 
   if (title) {
     return (

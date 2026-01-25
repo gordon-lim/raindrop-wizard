@@ -7,7 +7,7 @@ import Chalk from 'chalk';
 const chalk = Chalk as any;
 import opn from 'opn';
 import { z } from 'zod';
-import clack from './ui.js';
+import ui from './ui.js';
 import {
   API_KEY_ENDPOINT,
   ISSUES_URL,
@@ -140,17 +140,15 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>Raindrop wizard - Authorization ${
-                isAccessDenied ? 'cancelled' : 'failed'
-              }</title>
+              <title>Raindrop wizard - Authorization ${isAccessDenied ? 'cancelled' : 'failed'
+          }</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
             <body>
-              <p>${
-                isAccessDenied
-                  ? 'Authorization cancelled.'
-                  : `Authorization failed.`
-              }</p>
+              <p>${isAccessDenied
+            ? 'Authorization cancelled.'
+            : `Authorization failed.`
+          }</p>
               <p>Return to your terminal.</p>
             </body>
           </html>
@@ -284,17 +282,17 @@ export async function performOAuthFlow(
     state,
   );
 
-  clack.log.info(
-    `${chalk.bold(
+  ui.addItem({
+    type: 'response',
+    text: `${chalk.bold(
       "If the browser window didn't open automatically, please open the following link to be redirected to Raindrop:",
-    )}\n\n${chalk.cyan(urlToOpen)}${
-      config.signup
-        ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
-            localLoginUrl,
-          )}`
-        : ``
-    }`,
-  );
+    )}\n\n${chalk.cyan(urlToOpen)}${config.signup
+      ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
+        localLoginUrl,
+      )}`
+      : ``
+      }`,
+  });
 
   if (process.env.NODE_ENV !== 'test') {
     opn(urlToOpen, { wait: false }).catch(() => {
@@ -302,7 +300,7 @@ export async function performOAuthFlow(
     });
   }
 
-  const loginSpinner = clack.spinner();
+  const loginSpinner = ui.spinner();
   loginSpinner.start('Waiting for authorization...');
 
   try {
@@ -332,23 +330,24 @@ export async function performOAuthFlow(
     const error = e instanceof Error ? e : new Error('Unknown error');
 
     if (error.message.includes('timeout')) {
-      clack.log.error('Authorization timed out. Please try again.');
+      ui.addItem({ type: 'error', text: 'Authorization timed out. Please try again.' });
     } else if (error.message.includes('access_denied')) {
-      clack.log.info(
-        `${chalk.yellow(
+      ui.addItem({
+        type: 'response',
+        text: `${chalk.yellow(
           'Authorization was cancelled.',
         )}\n\nYou denied access to Raindrop. To use the wizard, you need to authorize access to your Raindrop account.\n\n${chalk.dim(
           'You can try again by re-running the wizard.',
         )}`,
-      );
+      });
     } else {
-      clack.log.error(
-        `${chalk.red('Authorization failed:')}\n\n${
-          error.message
-        }\n\n${chalk.dim(
-          `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
-        )}`,
-      );
+      ui.addItem({
+        type: 'error',
+        text: `${chalk.red('Authorization failed:')}\n\n${error.message
+          }\n\n${chalk.dim(
+            `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
+          )}`,
+      });
     }
 
     abort();

@@ -4,7 +4,7 @@ import type { WizardOptions } from './utils/types.js';
 
 import { getIntegrationDescription, Integration } from './lib/constants.js';
 import { readEnvironment } from './utils/environment.js';
-import clack from './utils/ui.js';
+import ui from './utils/ui.js';
 import path from 'path';
 import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config.js';
 import { runPythonWizard } from './python/python-wizard.js';
@@ -29,7 +29,7 @@ type Args = {
 
 async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
   const choice = await abortIfCancelled(
-    clack.select({
+    ui.select({
       message: 'Which setup would you like?',
       options: [
         {
@@ -78,7 +78,12 @@ export async function runWizard(argv: Args) {
     apiKey: finalArgs.apiKey,
   };
 
-  clack.intro(`Welcome to the raindrop.ai setup wizard ✨`);
+  ui.addItem({
+    type: 'phase',
+    text: '### Setup ###',
+  });
+
+  ui.addItem({ type: 'response', text: `✨ Welcome to the Raindrop wizard! I will help you set up Raindrop for your AI application. Thank you for using Raindrop! 💧` });
 
   const integration =
     finalArgs.integration ?? (await getIntegrationForSetup(wizardOptions));
@@ -95,18 +100,19 @@ export async function runWizard(argv: Args) {
         await handleVercelAiSdkSetup(wizardOptions);
         break;
       default:
-        clack.log.error('No setup wizard selected!');
+        ui.addItem({ type: 'error', text: 'No setup wizard selected!' });
     }
   } catch (error) {
     const docsUrl =
       (INTEGRATION_CONFIG as Record<string, { docsUrl: string }>)[integration]
         ?.docsUrl || 'https://raindrop.ai/docs';
-    clack.log.error(
-      `Something went wrong. You can read the documentation at ${chalk.cyan(
+    ui.addItem({
+      type: 'error',
+      text: `Something went wrong. You can read the documentation at ${chalk.cyan(
         docsUrl,
       )} to set up raindrop.ai manually.`,
-    );
-    clack.log.error(`error: ${String(error)}`);
+    });
+    ui.addItem({ type: 'error', text: `error: ${String(error)}` });
     process.exit(1);
   }
 }
@@ -135,14 +141,15 @@ async function getIntegrationForSetup(
   const detectedIntegration = await detectIntegration(options);
 
   if (detectedIntegration) {
-    clack.log.success(
-      `Detected integration: ${getIntegrationDescription(detectedIntegration)}`,
-    );
+    ui.addItem({
+      type: 'success',
+      text: `Detected integration: ${getIntegrationDescription(detectedIntegration)}`,
+    });
     return detectedIntegration;
   }
 
   const integration: Integration = await abortIfCancelled(
-    clack.select({
+    ui.select({
       message: 'What do you want to set up?',
       options: [
         { value: Integration.python, label: 'Python' },

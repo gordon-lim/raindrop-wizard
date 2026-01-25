@@ -8,7 +8,7 @@ import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import clack from '../utils/ui.js';
+import ui from '../utils/ui.js';
 import { abort } from '../utils/clack-utils.js';
 
 // ESM equivalent of __dirname
@@ -34,7 +34,7 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
     getDocumentation: async () => {
       try {
         // Ask about OTEL platform
-        const otelPlatform = await clack.select({
+        const otelPlatform = await ui.select({
           message: 'How do you want OpenTelemetry setup?',
           options: [
             {
@@ -56,7 +56,7 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
           ],
         });
 
-        if (clack.isCancel(otelPlatform)) {
+        if (ui.isCancel(otelPlatform)) {
           abort('Setup cancelled', 0);
         }
 
@@ -92,7 +92,6 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
 
   ui: {
     successMessage: 'raindrop.ai integration with Vercel AI SDK complete',
-    estimatedDurationMinutes: 10,
     getOutroChanges: () => [
       'Installed raindrop-ai package',
       'Configured OpenTelemetry trace exporter',

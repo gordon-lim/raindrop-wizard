@@ -18,7 +18,7 @@ export function SpinnerDisplay({ message }: SpinnerDisplayProps): React.ReactEle
   return (
     <Box>
       <Text color="cyan">
-        <InkSpinner type="dots" />
+        <InkSpinner type="toggle9" />
       </Text>
       <Text> {message}</Text>
     </Box>

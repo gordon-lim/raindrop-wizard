@@ -19,7 +19,7 @@ if (!satisfies(process.version, NODE_VERSION_RANGE)) {
 import type { WizardOptions } from './src/utils/types.js';
 import { runWizard } from './src/run.js';
 import { isNonInteractiveEnvironment } from './src/utils/environment.js';
-import clack, { initWizardUI } from './src/utils/ui.js';
+import ui, { initWizardUI } from './src/utils/ui.js';
 
 yargs(hideBin(process.argv))
   .env('RAINDROP')
@@ -86,12 +86,12 @@ yargs(hideBin(process.argv))
       const wizardUI = await initWizardUI();
 
       // Display logo through Ink
-      clack.showLogo();
+      ui.addItem({ type: 'logo', text: '' });
 
       try {
         await runWizard(options as unknown as WizardOptions);
       } catch (error) {
-        clack.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        ui.addItem({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` });
         wizardUI.unmount();
         process.exit(1);
       }

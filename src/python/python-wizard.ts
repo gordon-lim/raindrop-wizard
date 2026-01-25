@@ -43,7 +43,6 @@ const PYTHON_AGENT_CONFIG: FrameworkConfig = {
 
   ui: {
     successMessage: 'raindrop.ai integration complete',
-    estimatedDurationMinutes: 8,
     getOutroChanges: () => [
       'Installed raindrop-ai package',
       'Initialized raindrop client with API key',

@@ -8,6 +8,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useWizardActions } from '../contexts/WizardContext.js';
 import { CANCEL_SYMBOL } from '../cancellation.js';
+import { PromptContainer } from './PromptContainer.js';
 import type { TextOptions } from '../types.js';
 
 interface TextPromptProps {
@@ -18,15 +19,16 @@ interface TextPromptProps {
  * Text input prompt that integrates with the wizard context
  */
 export function TextPrompt({ options }: TextPromptProps): React.ReactElement {
-  const { resolvePending, addHistoryItem, log } = useWizardActions();
+  const { resolvePending, addItem } = useWizardActions();
   const [value, setValue] = useState(options.defaultValue || options.initialValue || '');
+  const [error, setError] = useState<string | null>(null);
 
   // Handle Ctrl+C cancellation
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
-      addHistoryItem({
+      addItem({
         type: 'text-result',
-        content: options.message,
+        text: options.message,
         label: '(cancelled)',
       });
       resolvePending(CANCEL_SYMBOL);
@@ -37,34 +39,42 @@ export function TextPrompt({ options }: TextPromptProps): React.ReactElement {
   const handleSubmit = (submittedValue: string) => {
     // Validate if validator provided
     if (options.validate) {
-      const error = options.validate(submittedValue);
-      if (error) {
-        log.error(error);
+      const validationError = options.validate(submittedValue);
+      if (validationError) {
+        setError(validationError);
         return;
       }
     }
 
-    addHistoryItem({
+    addItem({
       type: 'text-result',
-      content: options.message,
+      text: options.message,
       label: submittedValue || '(empty)',
     });
     resolvePending(submittedValue);
   };
 
   return (
-    <Box flexDirection="column">
+    <PromptContainer>
       <Text>{options.message}</Text>
       <Box marginTop={1}>
         <Text color="cyan">› </Text>
         <TextInput
           value={value}
-          onChange={setValue}
+          onChange={(newValue) => {
+            setValue(newValue);
+            if (error) setError(null);
+          }}
           placeholder={options.placeholder}
           onSubmit={handleSubmit}
         />
       </Box>
-    </Box>
+      {error && (
+        <Box marginTop={1}>
+          <Text color="red">{error}</Text>
+        </Box>
+      )}
+    </PromptContainer>
   );
 }
 

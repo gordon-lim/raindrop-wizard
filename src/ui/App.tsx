@@ -8,7 +8,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box, Static, Text } from 'ink';
+import { Box, Static } from 'ink';
 import { useWizardState } from './contexts/WizardContext.js';
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { PendingPrompt } from './components/PendingPrompt.js';
@@ -24,7 +24,9 @@ export function WizardApp(): React.ReactElement {
   const historyItems = useMemo(
     () =>
       history.map((item: HistoryItem) => (
-        <HistoryItemDisplay key={item.id} item={item} />
+        <Box key={item.id} marginBottom={1}>
+          <HistoryItemDisplay item={item} />
+        </Box>
       )),
     [history],
   );

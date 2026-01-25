@@ -8,7 +8,7 @@ import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import clack from '../utils/ui.js';
+import ui from '../utils/ui.js';
 import { abort } from '../utils/clack-utils.js';
 import { addTestUrl, removeTestUrl } from '../utils/test-url.js';
 
@@ -35,28 +35,28 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
     getDocumentation: async () => {
       try {
         // Ask about OTEL provider
-        const otelProvider = await clack.select({
-          message: 'Using Sentry/Datadog/other OTEL provider?',
+        const otelProvider = await ui.select({
+          message: 'Are you using Sentry, or another OTEL provider?',
           options: [
             {
               value: '',
-              label: 'No - standalone',
-              hint: 'Use raindrop.ai only',
+              label: 'Raindrop built-in observability',
+              hint: 'No OpenTelemetry provider needed.',
             },
             {
               value: 'sentry',
-              label: 'Yes - Sentry',
-              hint: 'Integrate with Sentry',
+              label: 'Sentry',
+              hint: 'Send OpenTelemetry data to Sentry.',
             },
             {
               value: 'other',
-              label: 'Other OTEL',
-              hint: 'Use another OTEL provider',
+              label: 'Another OpenTelemetry provider',
+              hint: 'Use any OTEL-compatible backend.',
             },
           ],
         });
 
-        if (clack.isCancel(otelProvider)) {
+        if (ui.isCancel(otelProvider)) {
           abort('Setup cancelled', 0);
         }
 
@@ -94,7 +94,6 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
 
   ui: {
     successMessage: 'raindrop.ai integration complete',
-    estimatedDurationMinutes: 8,
     getOutroChanges: () => [
       'Installed raindrop-ai package',
       'Initialized raindrop client with API key',

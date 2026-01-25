@@ -16,17 +16,17 @@ export function buildTestFeedbackMessage(
   const eventSummary =
     events.length > 0
       ? events
-          .map((event, idx) => {
-            const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
-            const spanCount = event.data.spans?.length || 0;
-            const aiAttrs = event.data.aiAttributes || event.data;
+        .map((event, idx) => {
+          const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
+          const spanCount = event.data.spans?.length || 0;
+          const aiAttrs = event.data.aiAttributes || event.data;
 
-            return `Event #${idx + 1} at ${event.url}:
+          return `Event #${idx + 1} at ${event.url}:
 Format: ${format}
 ${spanCount > 0 ? `Spans: ${spanCount}` : ''}
 Data: ${JSON.stringify(aiAttrs, null, 2)}`;
-          })
-          .join('\n\n')
+        })
+        .join('\n\n')
       : 'No events received.';
 
   return `# Integration Test Results (Attempt ${attemptNumber})
@@ -114,7 +114,39 @@ export async function buildIntegrationPrompt(
       '   - The project uses TypeScript SDKs like openai, @anthropic-ai/sdk, @google/generative-ai, litellm, etc. to make LLM API calls';
   }
 
-  return `Integrate raindrop.ai into this ${frameworkName} project that makes calls to LLM APIs.
+  // TODO: Remove this test prompt
+  const testAskUserQuestion = `
+IMPORTANT: Before doing anything else, you MUST call the AskUserQuestion tool with these exact questions:
+{
+  "questions": [
+    {
+      "question": "How should I format the output?",
+      "header": "Format",
+      "options": [
+        { "label": "Summary", "description": "Brief overview" },
+        { "label": "Detailed", "description": "Full explanation" }
+      ],
+      "multiSelect": false
+    },
+    {
+      "question": "Which sections should I include?",
+      "header": "Sections",
+      "options": [
+        { "label": "Introduction", "description": "Opening context" },
+        { "label": "Conclusion", "description": "Final summary" }
+      ],
+      "multiSelect": true
+    }
+  ]
+}
+
+After getting the user's answers, proceed with the integration below.
+
+---
+
+`;
+
+  return `${testAskUserQuestion}Integrate raindrop.ai into this ${frameworkName} project that makes calls to LLM APIs.
 
 Project context:
 - Framework: ${frameworkName} ${frameworkVersion}

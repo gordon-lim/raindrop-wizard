@@ -1,13 +1,12 @@
 /**
  * Unified UI API for the raindrop wizard.
  *
- * This module provides a clack-compatible API that dispatches to the unified
- * Ink app via WizardContext actions. No more separate render() calls!
+ * Direct API (like gemini-cli) that dispatches to the unified Ink app via WizardContext.
  *
  * Usage:
- * 1. Call startWizardUI() once at startup (in bin.ts)
- * 2. Use clack.select(), clack.text(), etc. - they dispatch to the unified app
- * 3. The app unmounts when you call the exit action
+ * 1. Call initWizardUI() once at startup (in bin.ts)
+ * 2. Use ui.addItem(), ui.select(), ui.text(), etc.
+ * 3. The app unmounts when you call ui.exit()
  */
 
 import {
@@ -22,10 +21,26 @@ import type {
   TextOptions,
   ConfirmOptions,
   SpinnerInstance,
+  ToolApprovalProps,
+  ToolApprovalResult,
+  ClarifyingQuestionsProps,
+  ClarifyingQuestionsResult,
 } from '../ui/types.js';
+import type { HistoryItemInput, AgentState } from '../ui/contexts/WizardContext.js';
 
 // Re-export types for convenience
-export type { SelectOptions, TextOptions, ConfirmOptions, SpinnerInstance };
+export type {
+  SelectOptions,
+  TextOptions,
+  ConfirmOptions,
+  SpinnerInstance,
+  HistoryItemInput,
+  ToolApprovalProps,
+  ToolApprovalResult,
+  ClarifyingQuestionsProps,
+  ClarifyingQuestionsResult,
+  AgentState,
+};
 export { isCancel, CANCEL_SYMBOL };
 
 // Global wizard instance
@@ -35,19 +50,17 @@ let wizardInstance: WizardInstance | null = null;
  * Initialize the wizard UI. Must be called before using any prompts.
  * Returns a promise that resolves when the wizard is ready.
  */
-async function initWizardUIInternal(): Promise<WizardInstance> {
+export async function initWizardUI(): Promise<WizardInstance> {
   if (wizardInstance) {
     return wizardInstance;
   }
   wizardInstance = startWizardUI();
-  // Wait for the wizard to be ready (actions available)
   await wizardInstance.waitUntilReady();
   return wizardInstance;
 }
 
 /**
- * Get actions, initializing the wizard if needed.
- * Throws if wizard hasn't been started.
+ * Get actions, throws if wizard hasn't been started.
  */
 function getActions() {
   const actions = getWizardActions();
@@ -60,153 +73,126 @@ function getActions() {
 }
 
 /**
+ * Add an item to history (direct, like gemini-cli).
+ * 
+ * @example
+ * ui.addItem({ type: 'response', text: 'Starting setup...' });
+ * ui.addItem({ type: 'success', text: 'Done!' });
+ * ui.addItem({ type: 'error', text: 'Something went wrong' });
+ * ui.addItem({ type: 'logo', text: '' });
+ */
+export function addItem(item: HistoryItemInput): void {
+  getActions().addItem(item);
+}
+
+/**
  * Display a select prompt and return the selected value.
  */
-async function select<T>(options: SelectOptions<T>): Promise<T | symbol> {
-  const actions = getActions();
-  return actions.showSelect(options) as Promise<T | symbol>;
+export async function select<T>(options: SelectOptions<T>): Promise<T | symbol> {
+  return getActions().select(options) as Promise<T | symbol>;
 }
 
 /**
  * Display a text input prompt and return the entered value.
  */
-async function text(options: TextOptions): Promise<string | symbol> {
-  const actions = getActions();
-  return actions.showText(options);
+export async function text(options: TextOptions): Promise<string | symbol> {
+  return getActions().text(options);
 }
 
 /**
  * Display a confirm prompt and return the boolean result.
  */
-async function confirm(options: ConfirmOptions): Promise<boolean | symbol> {
-  const actions = getActions();
-  return actions.showConfirm(options);
+export async function confirm(options: ConfirmOptions): Promise<boolean | symbol> {
+  return getActions().confirm(options);
 }
 
 /**
  * Create and return a spinner instance.
  */
-function spinner(): SpinnerInstance {
-  const actions = getActions();
-  return actions.showSpinner();
+export function spinner(): SpinnerInstance {
+  return getActions().spinner();
 }
 
 /**
- * Display an intro message.
+ * Exit the wizard UI.
  */
-function intro(message: string): void {
-  const actions = getActions();
-  actions.intro(message);
+export function exit(): void {
+  getActions().exit();
 }
 
 /**
- * Display an outro message.
+ * Check if the wizard UI is running.
  */
-function outro(message: string): void {
-  const actions = getActions();
-  actions.outro(message);
+export { isWizardRunning };
+
+// ============================================================================
+// Agent-related functions
+// ============================================================================
+
+/**
+ * Show tool approval prompt (replaces persistent-input, restores after).
+ * Used by canUseTool handler for tools that need user approval.
+ */
+export async function toolApproval(
+  props: ToolApprovalProps,
+): Promise<ToolApprovalResult> {
+  return getActions().toolApproval(props);
 }
 
 /**
- * Display a note message with optional title.
+ * Show clarifying questions prompt (replaces persistent-input, restores after).
+ * Used by canUseTool handler for AskUserQuestion tool.
  */
-function note(message: string, title?: string): void {
-  const actions = getActions();
-  actions.note(message, title);
+export async function clarifyingQuestions(
+  props: ClarifyingQuestionsProps,
+): Promise<ClarifyingQuestionsResult> {
+  return getActions().clarifyingQuestions(props);
 }
 
 /**
- * Display a cancellation message.
+ * Start persistent input mode during agent execution.
+ * Sets pendingItem to persistent-input type.
  */
-function cancel(message?: string): void {
-  const actions = getActions();
-  actions.cancel(message);
+export function startPersistentInput(config: {
+  onSubmit: (message: string) => void;
+  onInterrupt: () => void;
+  spinnerMessage?: string;
+}): void {
+  getActions().startPersistentInput(config);
 }
 
 /**
- * Display the logo.
+ * Stop persistent input mode.
+ * Clears pendingItem if it's persistent-input type.
  */
-function showLogo(): void {
-  const actions = getActions();
-  actions.showLogo();
+export function stopPersistentInput(): void {
+  getActions().stopPersistentInput();
 }
 
 /**
- * Log functions for various message types.
+ * Update agent state.
  */
-const log = {
-  info: (msg: string) => getActions().log.info(msg),
-  warn: (msg: string) => getActions().log.warn(msg),
-  error: (msg: string) => getActions().log.error(msg),
-  success: (msg: string) => getActions().log.success(msg),
-  step: (msg: string) => getActions().log.step(msg),
-};
-
-/**
- * Helper functions for task logging (Claude Code style).
- */
-function logTaskResult(taskName: string, details: string): void {
-  const actions = getActions();
-  actions.log.success(taskName);
-  actions.addHistoryItem({
-    type: 'log-info',
-    content: `  └─ ${details}`,
-  });
+export function setAgentState(state: Partial<AgentState>): void {
+  getActions().setAgentState(state);
 }
 
-function logResult(message: string): void {
-  const actions = getActions();
-  actions.addHistoryItem({
-    type: 'log-info',
-    content: `  └─ ${message}`,
-  });
-}
-
-function logTask(taskName: string): void {
-  const actions = getActions();
-  actions.log.success(taskName);
-}
-
-// Re-export for direct access
-export { initWizardUIInternal as initWizardUI };
-
-// Export as clack-compatible API
-const inkPrompts = {
+// Default export with all functions
+const ui = {
+  initWizardUI,
+  addItem,
   select,
-  confirm,
   text,
+  confirm,
   spinner,
-  intro,
-  outro,
-  note,
-  cancel,
-  log,
-  logTaskResult,
-  logResult,
-  logTask,
+  exit,
   isCancel,
-  showLogo,
-  // Additional exports for initialization
-  initWizardUI: initWizardUIInternal,
   isWizardRunning,
+  // Agent-related functions
+  toolApproval,
+  clarifyingQuestions,
+  startPersistentInput,
+  stopPersistentInput,
+  setAgentState,
 };
 
-export default inkPrompts;
-
-// Named exports for direct imports
-export {
-  select,
-  confirm,
-  text,
-  spinner,
-  intro,
-  outro,
-  note,
-  cancel,
-  log,
-  logTaskResult,
-  logResult,
-  logTask,
-  showLogo,
-  isWizardRunning,
-};
+export default ui;

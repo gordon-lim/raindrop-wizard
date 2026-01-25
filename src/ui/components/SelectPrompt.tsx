@@ -8,6 +8,7 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { useWizardActions } from '../contexts/WizardContext.js';
 import { CANCEL_SYMBOL } from '../cancellation.js';
+import { PromptContainer } from './PromptContainer.js';
 import type { SelectOptions } from '../types.js';
 
 interface SelectPromptProps {
@@ -18,14 +19,14 @@ interface SelectPromptProps {
  * Select prompt that integrates with the wizard context
  */
 export function SelectPrompt({ options }: SelectPromptProps): React.ReactElement {
-  const { resolvePending, addHistoryItem } = useWizardActions();
+  const { resolvePending, addItem } = useWizardActions();
 
   // Handle Ctrl+C cancellation
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
-      addHistoryItem({
+      addItem({
         type: 'select-result',
-        content: options.message,
+        text: options.message,
         label: '(cancelled)',
       });
       resolvePending(CANCEL_SYMBOL);
@@ -37,16 +38,13 @@ export function SelectPrompt({ options }: SelectPromptProps): React.ReactElement
     () =>
       options.options.map((opt, index) => {
         const number = `${index + 1}.`;
-        let label = `${number} ${opt.label}`;
-
-        if (opt.hint) {
-          label = `${number} ${opt.label}\n   ${opt.hint}`;
-        }
+        const label = `${number} ${opt.label}`;
 
         return {
           label,
           value: opt.value,
           originalLabel: opt.label,
+          hint: opt.hint,
         };
       }),
     [options.options],
@@ -63,9 +61,9 @@ export function SelectPrompt({ options }: SelectPromptProps): React.ReactElement
 
   // Handle selection
   const handleSelect = (item: { value: unknown; originalLabel?: string }) => {
-    addHistoryItem({
+    addItem({
       type: 'select-result',
-      content: options.message,
+      text: options.message,
       label: item.originalLabel || String(item.value),
     });
     resolvePending(item.value);
@@ -80,13 +78,22 @@ export function SelectPrompt({ options }: SelectPromptProps): React.ReactElement
   const itemComponent = ({
     isSelected,
     label,
+    hint,
   }: {
     isSelected: boolean;
     label: string;
-  }) => <Text color={isSelected ? 'cyan' : undefined}>{label}</Text>;
+    hint?: string;
+  }) => (
+    <Box flexDirection="column">
+      <Text color={isSelected ? 'cyan' : undefined}>{label}</Text>
+      {hint && (
+        <Text dimColor>   {hint}</Text>
+      )}
+    </Box>
+  );
 
   return (
-    <Box flexDirection="column">
+    <PromptContainer>
       <Text>{options.message}</Text>
       <Box marginTop={1}>
         <SelectInput
@@ -97,7 +104,7 @@ export function SelectPrompt({ options }: SelectPromptProps): React.ReactElement
           onSelect={handleSelect}
         />
       </Box>
-    </Box>
+    </PromptContainer>
   );
 }
 

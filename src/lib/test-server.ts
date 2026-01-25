@@ -3,7 +3,7 @@ import Chalk from 'chalk';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
-import clack from '../utils/ui.js';
+import ui from '../utils/ui.js';
 import { logToFile } from '../utils/debug.js';
 import {
   parseOtelTraces,
@@ -105,15 +105,16 @@ function createTestServer(): {
                     : String(protobufError),
               };
 
-              clack.log.warn(
-                chalk.yellow('Failed to parse as OTEL protobuf:') +
+              ui.addItem({
+                type: 'warning',
+                text: chalk.yellow('Failed to parse as OTEL protobuf:') +
                   '\n' +
                   chalk.dim(
                     protobufError instanceof Error
                       ? protobufError.message
                       : String(protobufError),
                   ),
-              );
+              });
             }
           }
 
@@ -129,8 +130,9 @@ function createTestServer(): {
               // Has spans: add to list
               eventsReceived.push({ url: req.url || '/', data: otelEvent });
 
-              clack.log.info(
-                chalk.cyan(`\n━━━ OTEL Trace at ${req.url} ━━━`) +
+              ui.addItem({
+                type: 'response',
+                text: chalk.cyan(`\n━━━ OTEL Trace at ${req.url} ━━━`) +
                   '\n' +
                   chalk.dim(JSON.stringify(otelEvent, null, 2)) +
                   '\n' +
@@ -139,12 +141,13 @@ function createTestServer(): {
                   chalk.yellow(
                     `Continue interacting or press any key to talk to the agent...`,
                   ),
-              );
+              });
             } else {
               // Empty OTEL trace: ignore and continue listening
-              clack.log.info(
-                chalk.dim(`OTEL trace with 0 spans at ${req.url} - ignoring`),
-              );
+              ui.addItem({
+                type: 'response',
+                text: chalk.dim(`OTEL trace with 0 spans at ${req.url} - ignoring`),
+              });
             }
           } else {
             // JSON event format: always add to list
@@ -156,8 +159,9 @@ function createTestServer(): {
               jsonEvent.is_pending === false ||
               jsonEvent.is_pending === 'false';
 
-            clack.log.info(
-              chalk.cyan(`\n━━━ Event at ${req.url} ━━━`) +
+            ui.addItem({
+              type: 'response',
+              text: chalk.cyan(`\n━━━ Event at ${req.url} ━━━`) +
                 '\n' +
                 chalk.dim(JSON.stringify(jsonEvent, null, 2)) +
                 '\n' +
@@ -168,33 +172,34 @@ function createTestServer(): {
                 chalk.yellow(
                   `Continue interacting or press any key to talk to the agent...`,
                 ),
-            );
+            });
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } catch (error) {
-          clack.log.error(
-            chalk.red('Failed to parse request:') +
+          ui.addItem({
+            type: 'error',
+            text: chalk.red('Failed to parse request:') +
               '\n' +
               chalk.dim(
-                `Error: ${
-                  error instanceof Error ? error.message : String(error)
+                `Error: ${error instanceof Error ? error.message : String(error)
                 }`,
               ),
-          );
+          });
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Failed to parse request body' }));
         }
       });
     } else {
-      clack.log.warn(
-        chalk.yellow('Non-POST request received:') +
+      ui.addItem({
+        type: 'warning',
+        text: chalk.yellow('Non-POST request received:') +
           '\n' +
           chalk.dim(`Method: ${req.method}`) +
           '\n' +
           chalk.dim(`URL: ${req.url}`),
-      );
+      });
       res.writeHead(404);
       res.end();
     }
@@ -240,15 +245,16 @@ export async function testIntegration(
       server.on('error', reject);
     });
 
-    clack.log.step(
-      chalk.cyan(`\nTest your integration (Attempt ${attemptNumber}):`) +
+    ui.addItem({
+      type: 'step',
+      text: chalk.cyan(`\nTest your integration (Attempt ${attemptNumber}):`) +
         '\n' +
         chalk.dim(`Interact with your AI.`) +
         '\n' +
         chalk.dim('Events will appear below as they arrive...') +
         '\n' +
         chalk.yellow('Press any key when done testing...'),
-    );
+    });
 
     // Wait for user to finish testing
     await waitForUserKeyPress();
@@ -257,7 +263,7 @@ export async function testIntegration(
     const receivedEvents = getReceivedEvents();
 
     // Ask if results look good
-    const resultsGood = await clack.select({
+    const resultsGood = await ui.select({
       message: `Test attempt ${attemptNumber}: Do the results look good?`,
       options: [
         { value: true, label: 'Yes, looks good - proceed' },
@@ -267,12 +273,12 @@ export async function testIntegration(
 
     if (resultsGood) {
       // User is satisfied
-      clack.log.success('Integration test passed!');
+      ui.addItem({ type: 'success', text: 'Integration test passed!' });
       return { sessionId, shouldRetry: false };
     }
 
     // User wants to provide feedback
-    const userFeedback = await clack.text({
+    const userFeedback = await ui.text({
       message: 'Provide feedback on the issues:',
       placeholder: 'e.g., "user_id is missing" or "wrong endpoint"',
     });
@@ -286,7 +292,7 @@ export async function testIntegration(
 
     // Run agent with feedback, resuming the previous session if we have a session ID
     if (sessionId) {
-      const newSessionId = await runAgent(
+      const agentResult = await runAgent(
         agentConfig,
         feedback,
         options,
@@ -298,11 +304,12 @@ export async function testIntegration(
           resume: sessionId,
         },
       );
-      return { sessionId: newSessionId, shouldRetry: true };
+      return { sessionId: agentResult.sessionId, shouldRetry: true };
     } else {
-      clack.log.warn(
-        chalk.yellow('No session ID available, cannot continue testing'),
-      );
+      ui.addItem({
+        type: 'warning',
+        text: chalk.yellow('No session ID available, cannot continue testing'),
+      });
       return { sessionId: undefined, shouldRetry: false };
     }
   } finally {

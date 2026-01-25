@@ -4,7 +4,7 @@ import Chalk from 'chalk';
 const chalk = Chalk as any;
 import { appendFileSync } from 'fs';
 import { prepareMessage } from './logging.js';
-import clack from './ui.js';
+import ui from './ui.js';
 
 let debugEnabled = false;
 
@@ -36,7 +36,7 @@ export function debug(...args: unknown[]) {
     return;
   }
 
-  // Don't sanitize debug logs to clack - they're for development
+  // Don't sanitize debug logs to ui - they're for development
   const msg = args
     .map((a) => {
       if (typeof a === 'string') {
@@ -49,7 +49,7 @@ export function debug(...args: unknown[]) {
     })
     .join(' ');
 
-  clack.log.info(chalk.dim(msg));
+  ui.addItem({ type: 'response', text: chalk.dim(msg) });
 }
 
 export function enableDebugLogs() {

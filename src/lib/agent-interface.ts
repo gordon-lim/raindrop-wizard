@@ -1,14 +1,18 @@
 /**
  * Shared agent interface for raindrop.ai wizards
- * Uses Claude Agent SDK directly
+ * Uses Claude Agent SDK directly with streaming input support
  */
 
 import path from 'path';
 import { createRequire } from 'module';
-import clack from '../utils/ui.js';
+import ui from '../utils/ui.js';
+import type {
+  SpinnerInstance,
+  AgentQueryHandle,
+  ToolApprovalResult,
+} from '../ui/types.js';
 import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug.js';
 import type { WizardOptions } from '../utils/types.js';
-import { LINTING_TOOLS } from './safe-tools.js';
 
 // Create a require function for ESM compatibility
 const require = createRequire(import.meta.url);
@@ -37,9 +41,20 @@ function getClaudeCodeExecutablePath(): string {
 type SDKMessage = any;
 type McpServersConfig = any;
 
+// Re-export AgentQueryHandle for external use
+export type { AgentQueryHandle };
+
 export type AgentConfig = {
   workingDirectory: string;
 };
+
+/**
+ * Result from runAgent including session ID and query handle
+ */
+export interface AgentRunResult {
+  sessionId?: string;
+  handle: AgentQueryHandle;
+}
 
 /**
  * Internal configuration object returned by initializeAgent
@@ -51,154 +66,136 @@ export type AgentRunConfig = {
 };
 
 /**
- * Package managers that can be used to run commands.
+ * Wrap a query stream to handle interrupt errors gracefully.
+ * When interrupt() is called, the SDK may throw errors, but we want the
+ * stream to continue so the user can send new messages.
  */
-const PACKAGE_MANAGERS = [
-  'npm',
-  'pnpm',
-  'yarn',
-  'bun',
-  'npx',
-  'pip',
-  'poetry',
-  'pipenv',
-  'conda',
-];
+async function* wrapQueryStream(
+  queryStream: AsyncIterable<SDKMessage>,
+  isInterruptingRef: { value: boolean },
+): AsyncGenerator<SDKMessage> {
+  const iterator = queryStream[Symbol.asyncIterator]();
 
-/**
- * Safe scripts/commands that can be run with any package manager.
- * Uses startsWith matching, so 'build' matches 'build', 'build:prod', etc.
- * Note: Linting tools are in LINTING_TOOLS and checked separately.
- */
-const SAFE_SCRIPTS = [
-  // Package installation
-  'install',
-  'add',
-  'ci',
-  // Build
-  'build',
-  // Type checking (various naming conventions)
-  'tsc',
-  'typecheck',
-  'type-check',
-  'check-types',
-  'types',
-  // Linting/formatting script names (actual tools are in LINTING_TOOLS)
-  'lint',
-  'format',
-];
+  while (true) {
+    try {
+      const result = await iterator.next();
+      if (result.done) {
+        break;
+      }
+      yield result.value;
+    } catch (error) {
+      const errorMsg = (error as Error).message || '';
+      const isInterruptError = isInterruptingRef.value ||
+        errorMsg.includes('aborted') ||
+        errorMsg.includes('interrupted') ||
+        errorMsg.includes('403');
 
-/**
- * Dangerous shell operators that could allow command injection.
- * Note: We handle `2>&1` and `| tail/head` separately as safe patterns.
- */
-const DANGEROUS_OPERATORS = /[;`$()]/;
-
-/**
- * Check if command is an allowed package manager command.
- * Matches: <pkg-manager> [run|exec] <safe-script> [args...]
- */
-function matchesAllowedPrefix(command: string): boolean {
-  const parts = command.split(/\s+/);
-  if (parts.length === 0 || !PACKAGE_MANAGERS.includes(parts[0])) {
-    return false;
+      if (isInterruptError) {
+        // Interrupt error - log but don't throw, allow stream to continue
+        logToFile('Interrupt error in stream, continuing:', errorMsg);
+        isInterruptingRef.value = false; // Reset flag
+        // Continue the while loop to get the next message after interrupt
+        continue;
+      } else {
+        // Real error - rethrow
+        throw error;
+      }
+    }
   }
+}
 
-  // Skip 'run' or 'exec' if present
-  let scriptIndex = 1;
-  if (parts[scriptIndex] === 'run' || parts[scriptIndex] === 'exec') {
-    scriptIndex++;
+// ============================================================================
+// Enhanced canUseTool Handler with UI Integration
+// ============================================================================
+
+/**
+ * Handle tool approval request by showing approval UI
+ */
+async function handleToolApproval(
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<ToolApprovalResult> {
+  logToFile('Showing tool approval UI:', { toolName, input });
+
+  // Build props for the approval prompt
+  const props = {
+    toolName,
+    input,
+    description: typeof input.description === 'string' ? input.description : undefined,
+    // For file edits, extract diff and filename
+    diffContent: typeof input.file_diff === 'string' ? input.file_diff : undefined,
+    fileName: typeof input.file_path === 'string'
+      ? input.file_path
+      : typeof input.path === 'string'
+        ? input.path
+        : undefined,
+  };
+
+  try {
+    const result = await ui.toolApproval(props);
+    logToFile('Tool approval result:', result);
+    return result;
+  } catch (error) {
+    logToFile('Error in tool approval:', error);
+    return {
+      behavior: 'deny',
+      message: 'Failed to get user approval',
+    };
   }
-
-  // Get the script/command portion (may include args)
-  const scriptPart = parts.slice(scriptIndex).join(' ');
-
-  // Check if script starts with any safe script name or linting tool
-  return (
-    SAFE_SCRIPTS.some((safe) => scriptPart.startsWith(safe)) ||
-    LINTING_TOOLS.some((tool) => scriptPart.startsWith(tool))
-  );
 }
 
 /**
- * Permission hook that allows only safe commands.
- * - Package manager install commands
- * - Build/typecheck/lint commands for verification
- * - Piping to tail/head for output limiting is allowed
- * - Stderr redirection (2>&1) is allowed
+ * Handle the AskUserQuestion tool by showing clarifying questions UI.
+ * Input already contains { questions: [...] } in the correct format.
+ * Returns { questions, answers } as expected by the SDK.
  */
-export function wizardCanUseTool(
-  toolName: string,
+async function handleClarifyingQuestions(
   input: Record<string, unknown>,
-):
-  | { behavior: 'allow'; updatedInput: Record<string, unknown> }
-  | { behavior: 'deny'; message: string } {
-  // Allow all non-Bash tools
-  if (toolName !== 'Bash') {
-    return { behavior: 'allow', updatedInput: input };
-  }
+): Promise<ToolApprovalResult> {
+  logToFile('Handling AskUserQuestion:', input);
 
-  const command = (
-    typeof input.command === 'string' ? input.command : ''
-  ).trim();
+  try {
+    // Input is already in ClarifyingQuestionsProps format
+    const result = await ui.clarifyingQuestions(input as any);
+    logToFile('Clarifying questions result:', result);
 
-  // Block definitely dangerous operators: ; ` $ ( )
-  if (DANGEROUS_OPERATORS.test(command)) {
-    logToFile(`Denying bash command with dangerous operators: ${command}`);
-    debug(`Denying bash command with dangerous operators: ${command}`);
+    // Return questions + answers as expected by SDK
+    return {
+      behavior: 'allow',
+      updatedInput: {
+        questions: result.questions,
+        answers: result.answers,
+      },
+    };
+  } catch (error) {
+    logToFile('Error in clarifying questions:', error);
     return {
       behavior: 'deny',
-      message: `Bash command not allowed. Shell operators like ; \` $ ( ) are not permitted.`,
+      message: 'Failed to get user answers',
     };
   }
+}
 
-  // Normalize: remove safe stderr redirection (2>&1, 2>&2, etc.)
-  const normalized = command.replace(/\s*\d*>&\d+\s*/g, ' ').trim();
+/**
+ * Create a canUseTool handler that integrates with the UI for approvals.
+ * - Handles AskUserQuestion by showing clarifying questions UI
+ * - Shows approval UI for other tools
+ */
+function createCanUseToolHandler() {
+  return async (
+    toolName: string,
+    input: unknown,
+  ): Promise<ToolApprovalResult> => {
+    const inputRecord = input as Record<string, unknown>;
+    logToFile('canUseTool called:', { toolName, input: inputRecord });
 
-  // Check for pipe to tail/head (safe output limiting)
-  const pipeMatch = normalized.match(/^(.+?)\s*\|\s*(tail|head)(\s+\S+)*\s*$/);
-  if (pipeMatch) {
-    const baseCommand = pipeMatch[1].trim();
-
-    // Block if base command has pipes or & (multiple chaining)
-    if (/[|&]/.test(baseCommand)) {
-      logToFile(`Denying bash command with multiple pipes: ${command}`);
-      debug(`Denying bash command with multiple pipes: ${command}`);
-      return {
-        behavior: 'deny',
-        message: `Bash command not allowed. Only single pipe to tail/head is permitted.`,
-      };
+    // Handle AskUserQuestion specially
+    if (toolName === 'AskUserQuestion') {
+      return handleClarifyingQuestions(inputRecord);
     }
 
-    if (matchesAllowedPrefix(baseCommand)) {
-      logToFile(`Allowing bash command with output limiter: ${command}`);
-      debug(`Allowing bash command with output limiter: ${command}`);
-      return { behavior: 'allow', updatedInput: input };
-    }
-  }
-
-  // Block remaining pipes and & (not covered by tail/head case above)
-  if (/[|&]/.test(normalized)) {
-    logToFile(`Denying bash command with pipe/&: ${command}`);
-    debug(`Denying bash command with pipe/&: ${command}`);
-    return {
-      behavior: 'deny',
-      message: `Bash command not allowed. Pipes are only permitted with tail/head for output limiting.`,
-    };
-  }
-
-  // Check if command starts with any allowed prefix
-  if (matchesAllowedPrefix(normalized)) {
-    logToFile(`Allowing bash command: ${command}`);
-    debug(`Allowing bash command: ${command}`);
-    return { behavior: 'allow', updatedInput: input };
-  }
-
-  logToFile(`Denying bash command: ${command}`);
-  debug(`Denying bash command: ${command}`);
-  return {
-    behavior: 'deny',
-    message: `Bash command not allowed. Only install, build, typecheck, lint, and formatting commands are permitted.`,
+    // Show approval UI for other tools
+    return handleToolApproval(toolName, inputRecord);
   };
 }
 
@@ -213,8 +210,6 @@ export function initializeAgent(
   initLogFile();
   logToFile('Agent initialization starting');
   logToFile('Install directory:', options.installDir);
-
-  clack.log.step('Initializing Claude agent...');
 
   try {
     // ANTHROPIC_API_KEY is required
@@ -237,7 +232,7 @@ export function initializeAgent(
     const agentRunConfig: AgentRunConfig = {
       workingDirectory: config.workingDirectory,
       mcpServers,
-      model: 'claude-opus-4-5-20251101',
+      model: 'claude-sonnet-4-5-20250929',
     };
 
     logToFile('Agent config:', {
@@ -252,11 +247,10 @@ export function initializeAgent(
       });
     }
 
-    clack.log.step(`Verbose logs: ${LOG_FILE_PATH}`);
-    clack.log.success("Agent initialized. Let's get cooking!");
+    ui.addItem({ type: 'step', text: `I'll keep verbose logs for this session at: ${LOG_FILE_PATH}` });
     return agentRunConfig;
   } catch (error) {
-    clack.log.error(`Failed to initialize agent: ${(error as Error).message}`);
+    ui.addItem({ type: 'error', text: `Failed to initialize agent: ${(error as Error).message}` });
     logToFile('Agent initialization error:', error);
     debug('Agent initialization error:', error);
     throw error;
@@ -264,39 +258,39 @@ export function initializeAgent(
 }
 
 /**
- * Execute an agent with the provided prompt and options
- * Handles the full lifecycle: spinner, execution, error handling
+ * Configuration for runAgent
+ */
+export interface RunAgentConfig {
+  spinnerMessage?: string;
+  successMessage?: string;
+  errorMessage?: string;
+  resume?: string;
+  /** Enable streaming input with persistent text input (default: false) */
+  streamingInput?: boolean;
+}
+
+/**
+ * Execute an agent with the provided prompt and options.
+ * Supports streaming input for user interruption and follow-up messages.
  *
- * @returns Session ID for resuming this agent session
+ * @returns Session ID and query handle for controlling the agent
  */
 export async function runAgent(
   agentConfig: AgentRunConfig,
   prompt: string,
   options: WizardOptions,
-  spinner: ReturnType<typeof clack.spinner>,
-  config?: {
-    estimatedDurationMinutes?: number;
-    spinnerMessage?: string;
-    successMessage?: string;
-    errorMessage?: string;
-    resume?: string;
-  },
-): Promise<string | undefined> {
+  spinner: SpinnerInstance,
+  config?: RunAgentConfig,
+): Promise<AgentRunResult> {
   const {
-    estimatedDurationMinutes = 8,
     spinnerMessage = 'Customizing your raindrop.ai setup...',
     successMessage = 'raindrop.ai integration complete',
     errorMessage = 'Integration failed',
     resume,
+    streamingInput = false,
   } = config ?? {};
 
   const { query } = await getSDKModule();
-
-  if (!resume) {
-    clack.log.step(
-      `This whole process should take about ${estimatedDurationMinutes} minutes including error checking and fixes.\n\nGrab some coffee!`,
-    );
-  }
 
   spinner.start(spinnerMessage);
 
@@ -304,54 +298,97 @@ export async function runAgent(
   logToFile('Starting agent run');
   logToFile('Claude Code executable:', cliPath);
   logToFile('Prompt:', prompt);
+  logToFile('Streaming input:', streamingInput);
   if (resume) {
     logToFile('Resuming session:', resume);
   }
 
   const startTime = Date.now();
   const collectedText: string[] = [];
-  let sessionId: string | undefined;
+  const pendingToolCalls = new Map<string, PendingToolCall>();
+  let sessionId: string | undefined = resume;
+
+  // Track interrupt state as ref object so it can be shared with wrapper
+  const isInterruptingRef = { value: false };
+  // Track if we're waiting for user input after Esc interrupt
+  let waitingForUserInput = false;
+
+  // Create the query handle for external control
+  let queryObject: any = null;
+  const handle: AgentQueryHandle = {
+    interrupt: async () => {
+      logToFile('Soft interrupt requested (Esc)');
+      isInterruptingRef.value = true;
+      waitingForUserInput = true;
+
+      // Mark all pending tool calls as interrupted and show them in history
+      if (pendingToolCalls.size > 0) {
+        for (const [toolUseId, pendingCall] of pendingToolCalls) {
+          ui.addItem({
+            type: 'tool-call',
+            text: pendingCall.toolName,
+            toolCall: {
+              toolName: pendingCall.toolName,
+              status: 'interrupted',
+              input: pendingCall.input,
+              description: pendingCall.description,
+            },
+          });
+          pendingToolCalls.delete(toolUseId);
+        }
+      } else {
+        // Only show generic "Interrupted" if no pending tool calls to display
+        ui.addItem({
+          type: 'error',
+          text: 'Interrupted',
+        });
+      }
+
+      // Stop the persistent input (removes the spinner)
+      if (streamingInput) {
+        ui.stopPersistentInput();
+      }
+
+      // Call SDK interrupt
+      if (queryObject?.interrupt) {
+        logToFile('Calling queryObject.interrupt()');
+        await queryObject.interrupt();
+        logToFile('queryObject.interrupt() completed');
+      } else {
+        logToFile('No queryObject.interrupt available');
+      }
+    },
+    sendMessage: () => {
+      // No-op: use interrupt + resume pattern instead of streaming messages
+      logToFile('sendMessage called but not supported - use interrupt and resume');
+    },
+  };
 
   try {
-    // Workaround for SDK bug: stdin closes before canUseTool responses can be sent.
-    // The fix is to use an async generator for the prompt that stays open until
-    // the result is received, keeping the stdin stream alive for permission responses.
-    // See: https://github.com/anthropics/claude-code/issues/4775
-    // See: https://github.com/anthropics/claude-agent-sdk-typescript/issues/41
-    let signalDone: () => void;
-    const resultReceived = new Promise<void>((resolve) => {
-      signalDone = resolve;
-    });
-
-    const createPromptStream = async function* () {
-      yield {
-        type: 'user',
-        session_id: '',
-        message: { role: 'user', content: prompt },
-        parent_tool_use_id: null,
-      };
-      await resultReceived;
-    };
-
-    const response = query({
-      prompt: createPromptStream(),
+    queryObject = query({
+      prompt,
       options: {
         model: agentConfig.model,
         cwd: agentConfig.workingDirectory,
-        permissionMode: 'acceptEdits',
+        permissionMode: 'default',
         mcpServers: agentConfig.mcpServers,
+        systemPrompt: { preset: "claude_code" },
         env: { ...process.env },
         resume,
-        canUseTool: (toolName: string, input: unknown) => {
-          logToFile('canUseTool called:', { toolName, input });
-          const result = wizardCanUseTool(
-            toolName,
-            input as Record<string, unknown>,
-          );
-          logToFile('canUseTool result:', result);
-          return Promise.resolve(result);
+        canUseTool: createCanUseToolHandler(),
+        // Permission rules to protect sensitive files
+        permissions: {
+          allow: [
+            'Bash(npm run lint)',
+            'Bash(npm run test:*)',
+          ],
+          deny: [
+            'Bash(curl:*)',
+            'Read(./.env)',
+            'Read(./.env.*)',
+            'Read(./secrets/**)',
+          ],
         },
-        tools: { type: 'preset', preset: 'claude_code' },
         // Capture stderr from CLI subprocess for debugging
         stderr: (data: string) => {
           logToFile('CLI stderr:', data);
@@ -362,45 +399,240 @@ export async function runAgent(
       },
     });
 
-    // Process the async generator
-    for await (const message of response) {
+    // Set up persistent input if streaming input is enabled
+    if (streamingInput) {
+      // Stop the spinner since we're replacing it with persistent input (which has its own spinner)
+      spinner.stop();
+
+      ui.startPersistentInput({
+        onSubmit: async () => {
+          // Submitting while agent is running triggers interrupt
+          // The user's message will be collected after the interrupt completes
+          logToFile('User submitted while agent running - triggering interrupt');
+          handle.interrupt();
+        },
+        onInterrupt: () => {
+          logToFile('User requested interrupt (Esc)');
+          handle.interrupt();
+        },
+        spinnerMessage: spinnerMessage,
+      });
+
+      // Update agent state
+      ui.setAgentState({
+        isRunning: true,
+        queryHandle: handle,
+      });
+    }
+
+    // Process the query stream
+    for await (const message of wrapQueryStream(queryObject, isInterruptingRef)) {
       // Capture session_id from any message
       if (message.session_id && !sessionId) {
         sessionId = message.session_id;
         logToFile('Captured session_id:', sessionId);
+
+        // Update agent state with session ID
+        if (streamingInput) {
+          ui.setAgentState({ sessionId });
+        }
       }
 
-      handleSDKMessage(message, options, spinner, collectedText);
-      // Signal completion when result received
+      handleSDKMessage(message, options, spinner, collectedText, pendingToolCalls, isInterruptingRef.value);
+
+      // Check for completion
       if (message.type === 'result') {
-        signalDone!();
+        if (message.subtype === 'success') {
+          logToFile('Received successful result');
+        } else {
+          logToFile('Received non-success result:', message.subtype);
+        }
+        break;
       }
     }
 
     const durationMs = Date.now() - startTime;
-
     logToFile(`Agent run completed in ${Math.round(durationMs / 1000)}s`);
     logToFile('Session ID for resuming:', sessionId);
 
+    // Check if we were interrupted and need to prompt for user input
+    if (waitingForUserInput && streamingInput && sessionId) {
+      logToFile('Stream ended after interrupt, waiting for user input');
+      spinner.stop();
+
+      // Prompt user for their next message
+      const userMessage = await ui.text({
+        message: 'What would you like the agent to do?',
+        placeholder: 'Type your message...',
+      });
+
+      // Check if user cancelled
+      if (typeof userMessage === 'symbol') {
+        logToFile('User cancelled input, ending session');
+        ui.setAgentState({ isRunning: false });
+        return { sessionId, handle };
+      }
+
+      // Show user message in UI
+      ui.addItem({
+        type: 'user-message',
+        text: userMessage,
+      });
+
+      // Resume the agent with the user's message using the SDK's resume feature
+      logToFile('Resuming agent after user input with message:', userMessage);
+      return await runAgent(
+        agentConfig,
+        userMessage,
+        options,
+        spinner,
+        {
+          ...config,
+          resume: sessionId,
+          streamingInput: true,
+        },
+      );
+    }
+
+    // Clean up streaming input
+    if (streamingInput) {
+      ui.stopPersistentInput();
+      ui.setAgentState({ isRunning: false });
+    }
+
     spinner.stop(successMessage);
-    return sessionId;
+    return { sessionId, handle };
   } catch (error) {
-    spinner.stop(errorMessage);
-    clack.log.error(`Error: ${(error as Error).message}`);
-    logToFile('Agent run failed:', error);
-    debug('Full error:', error);
-    throw error;
+    // Suppress error display during interrupt - the SDK throws errors when interrupted
+    // which is expected behavior, not an actual error condition
+    const errorMsg = (error as Error).message || '';
+    const isInterruptError = isInterruptingRef.value ||
+      errorMsg.includes('aborted') ||
+      errorMsg.includes('interrupted') ||
+      errorMsg.includes('403');
+
+    // Only show error message and throw if it's not an interrupt-related error
+    if (!isInterruptError) {
+      // Clean up on real error
+      if (streamingInput) {
+        ui.stopPersistentInput();
+        ui.setAgentState({ isRunning: false });
+      }
+      spinner.stop(errorMessage);
+      ui.addItem({ type: 'error', text: `Error: ${errorMsg}` });
+      logToFile('Agent run failed:', error);
+      debug('Full error:', error);
+      throw error;
+    }
+
+    // Handle interrupt error
+    spinner.stop();
+    logToFile('Agent interrupted (errors suppressed):', errorMsg);
+
+    // If user pressed Esc and is waiting for input, show the text prompt
+    if (waitingForUserInput && streamingInput && sessionId) {
+      logToFile('Waiting for user input after Esc interrupt');
+
+      // Prompt user for their next message
+      const userMessage = await ui.text({
+        message: 'What would you like the agent to do?',
+        placeholder: 'Type your message...',
+      });
+
+      // Check if user cancelled
+      if (typeof userMessage === 'symbol') {
+        logToFile('User cancelled input, ending session');
+        ui.setAgentState({ isRunning: false });
+        return { sessionId, handle };
+      }
+
+      // Show user message in UI
+      ui.addItem({
+        type: 'user-message',
+        text: userMessage,
+      });
+
+      // Resume the agent with the user's message using the SDK's resume feature
+      logToFile('Resuming agent after user input with message:', userMessage);
+      return await runAgent(
+        agentConfig,
+        userMessage,
+        options,
+        spinner,
+        {
+          ...config,
+          resume: sessionId,
+          streamingInput: true,
+        },
+      );
+    }
+
+    // Clean up on interrupt without waiting for input
+    if (streamingInput) {
+      ui.stopPersistentInput();
+      ui.setAgentState({ isRunning: false });
+    }
+    return { sessionId, handle };
   }
 }
 
 /**
- * Handle SDK messages and provide user feedback
+ * Pending tool call info stored while waiting for result
+ */
+interface PendingToolCall {
+  toolName: string;
+  input: Record<string, unknown>;
+  description?: string;
+}
+
+/**
+ * Extract result summary from tool result content
+ */
+function extractResultSummary(
+  toolName: string,
+  resultContent: unknown,
+): string | undefined {
+  // Handle string content
+  const content = typeof resultContent === 'string'
+    ? resultContent
+    : Array.isArray(resultContent)
+      ? resultContent.map((c: any) => c.text || '').join('\n')
+      : '';
+
+  if (!content) return undefined;
+
+  switch (toolName) {
+    case 'Glob': {
+      // Count non-empty lines (each line is a file path)
+      const lines = content.trim().split('\n').filter((l: string) => l.trim());
+      return `Found ${lines.length} files`;
+    }
+    case 'Read': {
+      // Count lines in the file content
+      const lineCount = content.split('\n').length;
+      return `Read ${lineCount} lines`;
+    }
+    case 'Grep': {
+      // Count match lines
+      const lines = content.trim().split('\n').filter((l: string) => l.trim());
+      return `Found ${lines.length} matches`;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Handle SDK messages and provide user feedback.
+ * Handles assistant text, tool use, tool results, and system messages.
  */
 function handleSDKMessage(
   message: SDKMessage,
   options: WizardOptions,
-  spinner: ReturnType<typeof clack.spinner>,
+  spinner: SpinnerInstance,
   collectedText: string[],
+  pendingToolCalls: Map<string, PendingToolCall>,
+  isInterrupting: boolean,
 ): void {
   logToFile(`SDK Message: ${message.type}`, JSON.stringify(message, null, 2));
 
@@ -415,7 +647,87 @@ function handleSDKMessage(
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block.type === 'text' && typeof block.text === 'string') {
+            // Skip displaying the first agent message (it's a generic intro that's
+            // redundant after the setup phase), but still collect it for logging
+            const isFirstMessage = collectedText.length === 0;
             collectedText.push(block.text);
+
+            // Add agent message to history for visibility (skip first message)
+            if (!isFirstMessage) {
+              ui.addItem({
+                type: 'agent-message',
+                text: block.text,
+              });
+            }
+          }
+          // Handle tool_use blocks - store pending, don't add to history yet
+          if (block.type === 'tool_use') {
+            const toolName = block.name || 'Unknown tool';
+            const toolInput = block.input || {};
+            const toolUseId = block.id;
+            logToFile(`Tool use requested: ${toolName} (id: ${toolUseId})`, toolInput);
+
+            // Skip storing/displaying internal SDK tools
+            if (toolName === 'Task' || toolName === 'AskUserQuestion' || toolName === 'TodoWrite') {
+              continue;
+            }
+
+            // Store pending tool call to complete when result arrives
+            pendingToolCalls.set(toolUseId, {
+              toolName,
+              input: toolInput,
+              description:
+                typeof toolInput.description === 'string'
+                  ? toolInput.description
+                  : undefined,
+            });
+          }
+        }
+      }
+      break;
+    }
+
+    case 'user': {
+      // Tool results come as 'user' messages with tool_result content
+      const content = message.message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'tool_result') {
+            const toolUseId = block.tool_use_id;
+            const isError = block.is_error === true;
+            const resultContent = block.content;
+
+            logToFile(`Tool result for ${toolUseId}:`, {
+              isError,
+              content: resultContent,
+            });
+
+            // Look up the pending tool call
+            const pendingCall = pendingToolCalls.get(toolUseId);
+            if (pendingCall) {
+              pendingToolCalls.delete(toolUseId);
+
+              // Extract result summary based on tool type
+              const resultSummary = extractResultSummary(pendingCall.toolName, resultContent);
+
+              // Add completed tool call to history
+              ui.addItem({
+                type: 'tool-call',
+                text: pendingCall.toolName,
+                toolCall: {
+                  toolName: pendingCall.toolName,
+                  status: isError ? 'error' : 'success',
+                  input: pendingCall.input,
+                  description: pendingCall.description,
+                  result: resultSummary,
+                  error: isError ? String(resultContent) : undefined,
+                },
+              });
+            }
+
+            if (isError && options.debug) {
+              debug(`Tool error: ${resultContent}`);
+            }
           }
         }
       }
@@ -427,13 +739,27 @@ function handleSDKMessage(
         logToFile('Agent completed successfully');
         if (typeof message.result === 'string') {
           collectedText.push(message.result);
+          // Add final result to history
+          if (message.result.trim()) {
+            ui.addItem({
+              type: 'success',
+              text: message.result,
+            });
+          }
         }
       } else {
-        // Error result
+        // Error result - suppress if it's an interrupt-related error
         logToFile('Agent error result:', message.subtype);
-        if (message.errors) {
+        if (message.errors && !isInterrupting) {
           for (const err of message.errors) {
-            clack.log.error(`Error: ${err}`);
+            // Check if error is interrupt-related
+            const errStr = String(err);
+            const isInterruptError = errStr.includes('aborted') ||
+              errStr.includes('interrupted') ||
+              errStr.includes('403');
+            if (!isInterruptError) {
+              ui.addItem({ type: 'error', text: `Error: ${err}` });
+            }
             logToFile('ERROR:', err);
           }
         }
