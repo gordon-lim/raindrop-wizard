@@ -208,17 +208,57 @@ async function handleClarifyingQuestions(
 }
 
 /**
+ * Handle the ExitPlanMode tool by showing plan approval UI.
+ * Input contains { plan: "..." } with the plan in markdown format.
+ * If user approves, returns allow. If user rejects, returns deny with feedback.
+ */
+async function handlePlanApproval(
+  input: Record<string, unknown>,
+): Promise<ToolApprovalResult> {
+  logToFile('Handling ExitPlanMode:', input);
+
+  const planContent = typeof input.plan === 'string'
+    ? input.plan
+    : '';
+
+  try {
+    const result = await ui.planApproval({ planContent });
+    logToFile('Plan approval result:', result);
+
+    if (result.approved) {
+      // User approved the plan - allow the tool
+      return {
+        behavior: 'allow',
+        updatedInput: input,
+      };
+    } else {
+      // User rejected with feedback - deny the tool
+      return {
+        behavior: 'deny',
+        message: result.feedback || 'User rejected plan',
+      };
+    }
+  } catch (error) {
+    logToFile('Error in plan approval:', error);
+    return {
+      behavior: 'deny',
+      message: 'Failed to get user response',
+    };
+  }
+}
+
+/**
  * Tools that are automatically approved without user confirmation
  */
 const AUTO_APPROVED_TOOLS = new Set([
   'mcp__raindrop-wizard__CompleteIntegration',
   'EnterPlanMode',
-  'ExitPlanMode',
 ]);
 
 /**
  * Create a canUseTool handler that integrates with the UI for approvals.
  * - Handles AskUserQuestion by showing clarifying questions UI
+ * - Handles ExitPlanMode by showing plan approval UI
  * - Shows approval UI for other tools
  */
 export function createCanUseToolHandler() {
@@ -239,6 +279,11 @@ export function createCanUseToolHandler() {
     // Handle AskUserQuestion specially
     if (toolName === 'AskUserQuestion') {
       return handleClarifyingQuestions(inputRecord);
+    }
+
+    // Handle ExitPlanMode specially
+    if (toolName === 'ExitPlanMode') {
+      return handlePlanApproval(inputRecord);
     }
 
     // Show approval UI for other tools

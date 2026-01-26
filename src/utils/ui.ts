@@ -24,6 +24,8 @@ import type {
   ToolApprovalResult,
   ClarifyingQuestionsProps,
   ClarifyingQuestionsResult,
+  PlanApprovalProps,
+  PlanApprovalResult,
 } from '../ui/types.js';
 import type { HistoryItemInput, AgentState } from '../ui/contexts/WizardContext.js';
 
@@ -37,6 +39,8 @@ export type {
   ToolApprovalResult,
   ClarifyingQuestionsProps,
   ClarifyingQuestionsResult,
+  PlanApprovalProps,
+  PlanApprovalResult,
   AgentState,
 };
 export { isCancel, CANCEL_SYMBOL };
@@ -141,6 +145,16 @@ export async function clarifyingQuestions(
 }
 
 /**
+ * Show plan approval prompt (replaces persistent-input, restores after).
+ * Used by canUseTool handler for ExitPlanMode tool.
+ */
+export async function planApproval(
+  props: PlanApprovalProps,
+): Promise<PlanApprovalResult> {
+  return getActions().planApproval(props);
+}
+
+/**
  * Start persistent input mode during agent execution.
  * Sets pendingItem to persistent-input type.
  */
@@ -180,6 +194,7 @@ const ui = {
   // Agent-related functions
   toolApproval,
   clarifyingQuestions,
+  planApproval,
   startPersistentInput,
   stopPersistentInput,
   setAgentState,

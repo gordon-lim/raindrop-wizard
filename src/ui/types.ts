@@ -100,6 +100,25 @@ export interface ClarifyingQuestionsResult {
 }
 
 // ============================================================================
+// Plan Approval Types (ExitPlanMode tool)
+// ============================================================================
+
+/**
+ * Props for plan approval prompts
+ */
+export interface PlanApprovalProps {
+  planContent: string;
+}
+
+/**
+ * Result from plan approval - returned to the handler
+ */
+export interface PlanApprovalResult {
+  approved: boolean;
+  feedback?: string; // Present only if approved: false
+}
+
+// ============================================================================
 // Persistent Input Types
 // ============================================================================
 

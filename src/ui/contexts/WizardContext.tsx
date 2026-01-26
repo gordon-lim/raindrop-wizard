@@ -20,6 +20,8 @@ import type {
   ToolApprovalResult,
   ClarifyingQuestionsProps,
   ClarifyingQuestionsResult,
+  PlanApprovalProps,
+  PlanApprovalResult,
   PersistentInputProps,
   ToolCallInfo,
   AgentQueryHandle,
@@ -47,7 +49,9 @@ export type HistoryItemType =
   | 'user-message'
   | 'clarifying-questions-result'
   | 'declined-questions'
-  | 'received-event';
+  | 'received-event'
+  | 'plan-approved'
+  | 'plan-rejected';
 
 /**
  * Data for received-event history items
@@ -81,6 +85,8 @@ export interface HistoryItem {
   questionsAndAnswers?: Array<{ question: string; answer: string }>;
   /** For received-event items, the event data */
   receivedEvent?: ReceivedEventData;
+  /** For plan-approved and plan-rejected items, the plan content */
+  planContent?: string;
 }
 
 /**
@@ -97,6 +103,7 @@ export type PendingItemType =
   | 'spinner'
   | 'tool-approval'
   | 'clarifying-questions'
+  | 'plan-approval'
   | 'persistent-input';
 
 /**
@@ -115,6 +122,7 @@ export type PendingItemProps =
   | SpinnerProps
   | ToolApprovalProps
   | ClarifyingQuestionsProps
+  | PlanApprovalProps
   | PersistentInputProps;
 
 /**
@@ -197,6 +205,12 @@ export interface WizardActions {
   clarifyingQuestions: (
     props: ClarifyingQuestionsProps,
   ) => Promise<ClarifyingQuestionsResult>;
+
+  /**
+   * Show plan approval prompt (replaces persistent-input, restores after)
+   * Used by canUseTool handler for ExitPlanMode tool
+   */
+  planApproval: (props: PlanApprovalProps) => Promise<PlanApprovalResult>;
 
   /**
    * Start persistent input mode during agent execution
@@ -437,6 +451,24 @@ export function WizardProvider({
     [restorePersistentInput],
   );
 
+  // Show plan approval prompt
+  const planApproval = useCallback(
+    (props: PlanApprovalProps): Promise<PlanApprovalResult> => {
+      return new Promise((resolve) => {
+        setPendingItem({
+          type: 'plan-approval',
+          props,
+          resolve: (result) => {
+            // Restore persistent input after user responds
+            restorePersistentInput();
+            resolve(result as PlanApprovalResult);
+          },
+        });
+      });
+    },
+    [restorePersistentInput],
+  );
+
   // Start persistent input mode
   const startPersistentInput = useCallback(
     (config: {
@@ -504,6 +536,7 @@ export function WizardProvider({
       exit,
       toolApproval,
       clarifyingQuestions,
+      planApproval,
       startPersistentInput,
       stopPersistentInput,
       setAgentState,
@@ -517,6 +550,7 @@ export function WizardProvider({
       exit,
       toolApproval,
       clarifyingQuestions,
+      planApproval,
       startPersistentInput,
       stopPersistentInput,
       setAgentState,

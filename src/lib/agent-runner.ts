@@ -99,6 +99,7 @@ export async function runAgentWizard(
   // Unified loop: run agent, then test, repeat if user provides feedback
   // TODO: Enable test integration for vercelaisdk once implemented
   let prompt = integrationPrompt;
+  // let prompt = "First, write a plan to write a hello world script to a plan file then call the ExitPlanMode tool.";
   let resume: string | undefined = undefined;
   let shouldContinue = true;
 

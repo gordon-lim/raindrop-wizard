@@ -15,12 +15,14 @@ import { SpinnerDisplay } from './SpinnerDisplay.js';
 import { PersistentTextInput } from './PersistentTextInput.js';
 import { ToolApprovalPrompt } from './ToolApprovalPrompt.js';
 import { ClarifyingQuestionsPrompt } from './ClarifyingQuestionsPrompt.js';
+import { PlanApprovalPrompt } from './PlanApprovalPrompt.js';
 import type {
   SelectOptions,
   TextOptions,
   PersistentInputProps,
   ToolApprovalProps,
   ClarifyingQuestionsProps,
+  PlanApprovalProps,
 } from '../types.js';
 
 interface PendingPromptProps {
@@ -50,6 +52,9 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
 
     case 'clarifying-questions':
       return <ClarifyingQuestionsPrompt props={item.props as ClarifyingQuestionsProps} />;
+
+    case 'plan-approval':
+      return <PlanApprovalPrompt props={item.props as PlanApprovalProps} />;
 
     default:
       return (

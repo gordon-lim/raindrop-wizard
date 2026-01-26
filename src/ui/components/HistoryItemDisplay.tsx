@@ -196,6 +196,37 @@ export function HistoryItemDisplay({
         </Box>
       );
 
+    case 'plan-approved':
+      return (
+        <Box flexDirection="column">
+          <Box>
+            <Text color="green">●</Text>
+            <Text> {item.text}</Text>
+          </Box>
+          {item.planContent && (
+            <Box marginLeft={2} marginTop={1} flexDirection="column">
+              <Markdown>{item.planContent}</Markdown>
+            </Box>
+          )}
+        </Box>
+      );
+
+    case 'plan-rejected':
+      return (
+        <Box flexDirection="column">
+          <Box>
+            <Text color="red">●</Text>
+            <Text color="red"> {item.text}</Text>
+          </Box>
+          {item.label && (
+            <Box marginLeft={2}>
+              <Text dimColor>└─ </Text>
+              <Text color="red">{item.label}</Text>
+            </Box>
+          )}
+        </Box>
+      );
+
     default:
       return (
         <Box>
