@@ -39,7 +39,7 @@ async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
         },
         {
           value: 'typescript',
-          label: 'raindrop.ai Typescript SDK',
+          label: 'Raindrop Typescript SDK',
           hint: 'attachments, custom properties',
         },
       ],
@@ -110,7 +110,7 @@ export async function runWizard(argv: Args) {
       type: 'error',
       text: `Something went wrong. You can read the documentation at ${chalk.cyan(
         docsUrl,
-      )} to set up raindrop.ai manually.`,
+      )} to set up Raindrop manually.`,
     });
     ui.addItem({ type: 'error', text: `error: ${String(error)}` });
     process.exit(1);

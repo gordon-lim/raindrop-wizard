@@ -13,7 +13,14 @@ import type { WizardOptions } from '../utils/types.js';
 type SDKMessage = any;
 
 /** Internal SDK tools that should not be stored/displayed */
-const INTERNAL_TOOLS = new Set(['Task', 'AskUserQuestion', 'TodoWrite', 'mcp__raindrop-wizard__CompleteIntegration']);
+const INTERNAL_TOOLS = new Set([
+  'Task',
+  'AskUserQuestion',
+  'TodoWrite',
+  'mcp__raindrop-wizard__CompleteIntegration',
+  'EnterPlanMode',
+  'ExitPlanMode',
+]);
 
 /**
  * Extract result summary from tool result content
@@ -168,13 +175,10 @@ export function processSDKMessage(
         logToFile('Agent completed successfully');
         if (typeof message.result === 'string') {
           collectedText.push(message.result);
-          // Add final result to history
-          if (message.result.trim()) {
-            ui.addItem({
-              type: 'success',
-              text: message.result,
-            });
-          }
+          // Note: We intentionally don't display the result message here.
+          // The SDK's result.result field contains the same text as the last
+          // assistant message, which we already render above. Displaying both
+          // would cause duplicate output in the UI.
         }
       } else {
         // Error result - suppress if it's an interrupt-related error

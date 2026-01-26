@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import Markdown from '@inkkit/ink-markdown';
 import type { HistoryItem, ReceivedEventData } from '../contexts/WizardContext.js';
 import { Logo } from './Logo.js';
 import { ToolCallDisplay } from './ToolCallDisplay.js';
@@ -143,8 +144,8 @@ export function HistoryItemDisplay({
     case 'agent-message':
       return (
         <Box>
-          <Text color="magenta">◆</Text>
-          <Text> {item.text}</Text>
+          <Text color="magenta">◆ </Text>
+          <Markdown>{item.text}</Markdown>
         </Box>
       );
 

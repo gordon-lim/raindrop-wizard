@@ -208,6 +208,15 @@ async function handleClarifyingQuestions(
 }
 
 /**
+ * Tools that are automatically approved without user confirmation
+ */
+const AUTO_APPROVED_TOOLS = new Set([
+  'mcp__raindrop-wizard__CompleteIntegration',
+  'EnterPlanMode',
+  'ExitPlanMode',
+]);
+
+/**
  * Create a canUseTool handler that integrates with the UI for approvals.
  * - Handles AskUserQuestion by showing clarifying questions UI
  * - Shows approval UI for other tools
@@ -219,6 +228,13 @@ export function createCanUseToolHandler() {
   ): Promise<ToolApprovalResult> => {
     const inputRecord = input as Record<string, unknown>;
     logToFile('canUseTool called:', { toolName, input: inputRecord });
+
+    if (AUTO_APPROVED_TOOLS.has(toolName)) {
+      return {
+        behavior: 'allow',
+        updatedInput: inputRecord,
+      };
+    }
 
     // Handle AskUserQuestion specially
     if (toolName === 'AskUserQuestion') {

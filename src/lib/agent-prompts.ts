@@ -1,5 +1,5 @@
 /**
- * Agent prompt templates for raindrop.ai integration wizard
+ * Agent prompt templates for Raindrop integration wizard
  */
 
 import type { FrameworkConfig } from './framework-config.js';
@@ -44,7 +44,8 @@ Analyze the events and user feedback, then fix the code to address any issues:
 1. Review the event data structure and user's comments
 2. Identify what's missing or incorrect
 3. Update the integration code to fix the problems
-4. The wizard will automatically retest after your fixes`;
+4. Verify the build still succeeds after your fixes
+5. Call CompleteIntegration with \`{}\` when done`;
 }
 
 /**
@@ -54,13 +55,13 @@ function formatOtelProviderInfo(otelProvider: string): string {
   if (otelProvider === 'sentry') {
     return (
       `- OTEL Provider: 'sentry'\n` +
-      `Integrate raindrop.ai alongside Sentry. Ensure compatibility with existing Sentry ` +
+      `Integrate Raindrop alongside Sentry. Ensure compatibility with existing Sentry ` +
       `configuration.`
     );
   } else if (otelProvider === 'other') {
     return (
       `- OTEL Provider: 'other'\n` +
-      `Integrate raindrop.ai alongside an existing OTEL provider other than Sentry. ` +
+      `Integrate Raindrop alongside an existing OTEL provider other than Sentry. ` +
       `Ensure compatibility with the existing OTEL setup.`
     );
   }
@@ -111,73 +112,44 @@ export async function buildIntegrationPrompt(
       '   - The project uses TypeScript SDKs like openai, @anthropic-ai/sdk, @google/generative-ai, litellm, etc. to make LLM API calls';
   }
 
-  return `Integrate raindrop.ai into this ${frameworkName} project that makes calls to LLM APIs.
+  return `Integrate Raindrop into this ${frameworkName} project.
 
-Project context:
+## Context
 - Framework: ${frameworkName} ${frameworkVersion}
 ${otelProviderInfo}
-
-Instructions:
-
-1. Install the raindrop.ai SDK package using the appropriate package manager for this project:
-   - Detect the package manager by checking for lockfiles or configuration files
-     (e.g., package-lock.json/yarn.lock/pnpm-lock.yaml for Node.js,
-     requirements.txt/poetry.lock/Pipfile for Python, etc.)
-   - Use the detected package manager to install the raindrop.ai SDK
-     (e.g., npm/yarn/pnpm/bun for Node.js, pip/poetry/pipenv for Python)
-   - Do not manually edit package.json, requirements.txt, or lockfiles - use the package manager
-     commands instead
-   - You will be provided raindrop.ai documentation for this integration below
-
-2. Integrate raindrop.ai where the project makes calls to LLM APIs:
-   - Find files that contain LLM API client initialization, API calls, or request handlers
 ${sdkDescription}
-   - Use an existing user ID (from authentication, session, etc.), or generate one if unavailable (e.g., with UUID)
 
-3. Initialize raindrop.ai with the appropriate configuration:
-   - Read the RAINDROP_WRITE_KEY environment variable from .env (located at the project root)
-   - Use this environment variable where applicable
+## Instructions
 
-4. Follow best practices for ${frameworkName} and ensure the integration doesn't break existing
-   functionality.
+1. **Install Raindrop SDK**
+   - Detect the package manager from lockfiles (package-lock.json, yarn.lock, pnpm-lock.yaml, poetry.lock, etc.)
+   - Use the package manager to install - do NOT manually edit dependency files
+   - Documentation is provided below
 
-5. Verify the build and check for errors before finishing:
-   - After making all changes, test the project to ensure it builds/runs without errors
-   - For TypeScript/JavaScript projects: run the build command (npm run build, pnpm build, yarn build, etc.)
-   - For Python projects: check for syntax errors by running the main server script (e.g., python app.py, python main.py, uvicorn main:app, flask run, or similar)
-   - If you encounter errors (compilation errors, import errors, syntax errors, type mismatches), fix them
-   - After fixing, re-run the build/server command to verify the fixes worked
-   - Repeat until the project builds or starts successfully without errors
-   - Also run type checking if available (tsc --noEmit for TypeScript, mypy for Python)
+2. **Integrate at LLM API call sites**
+   - Find files with LLM client initialization or API calls
+   - Use an existing user ID from auth/session, or generate one with UUID if unavailable
+   - Read RAINDROP_WRITE_KEY from .env at project root
 
-Focus on files where LLM API calls are made - these are the files that need to be modified to
-integrate raindrop.ai. ${docsSection}
+3. **Verify the build**
+   - Run the build/type-check command and fix any errors
+   - Repeat until the project builds successfully
 
-## Signaling Completion
+Follow ${frameworkName} best practices. Focus on files where LLM API calls are made.${docsSection}
 
-CRITICAL: After you have completed all integration steps, you MUST call the CompleteIntegration
-tool to signal that you're done.
+## Completion
 
-The CompleteIntegration tool is available to you. Call it with an empty object:
-- Tool: CompleteIntegration
-- Input: {} (empty)
+CRITICAL: After completing all steps, call the CompleteIntegration tool with an empty object \`{}\`.
 
-Do NOT call this tool until you have:
-1. Successfully installed the raindrop.ai package
-2. Integrated raindrop.ai into all relevant LLM API call sites
-3. Verified the project builds/runs without errors
+Only call CompleteIntegration after you have:
+1. Installed the Raindrop package
+2. Integrated at all LLM API call sites
+3. Verified the build succeeds
 
-Once you call CompleteIntegration, the wizard will automatically transition to the testing phase
-where the integration will be validated.
+## First Action
 
-## Testing & Verification
-
-After completing the integration, the wizard will test it automatically.
-
-If issues are found:
-1. Analyze the test results and user feedback
-2. Fix the code to address the issues
-3. The wizard will automatically test again after you're done
-
-Maximum 3 test attempts will be allowed.`;
+Your first action MUST be to call the EnterPlanMode tool. This will allow you to:
+- Explore the codebase to understand the project structure and LLM API usage
+- Use AskUserQuestions to clarify details (e.g., which features to integrate)
+- Create a plan before making any changes`;
 }

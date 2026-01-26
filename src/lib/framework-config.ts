@@ -22,7 +22,7 @@ export interface FrameworkMetadata {
   /** Integration type from constants */
   integration: Integration;
 
-  /** URL to SDK-specific raindrop.ai docs */
+  /** URL to SDK-specific Raindrop docs */
   docsUrl: string;
 }
 
@@ -52,9 +52,6 @@ export interface UIConfig {
   /** Success message when agent completes */
   successMessage: string;
 
-  /** Generate "What the agent did" bullets from context */
-  getOutroChanges: (context: any) => string[];
-
   /** Generate "Next steps" bullets from context */
   getOutroNextSteps: (context: any) => string[];
 }
@@ -70,4 +67,4 @@ export function getWelcomeMessage(frameworkName: string): string {
  * Shared spinner message for all frameworks
  */
 export const SPINNER_MESSAGE =
-  "Pitter patter, let's get at 'er... integrating with raindrop.ai!";
+  "Pitter patter, let's get at 'er... integrating with Raindrop!";

@@ -27,7 +27,7 @@ import { testIntegration } from './test-server.js';
 
 /**
  * Universal agent-powered wizard runner.
- * Handles the complete flow for any raindrop.ai integration.
+ * Handles the complete flow for any Raindrop integration.
  */
 export async function runAgentWizard(
   config: FrameworkConfig,
@@ -37,7 +37,7 @@ export async function runAgentWizard(
   const aiConsent = await askForAIConsent(options);
   if (!aiConsent) {
     abort(
-      `This wizard uses an LLM agent to intelligently modify your project. Please view the docs to set up raindrop.ai for your ${config.metadata.name} SDK manually instead: ${config.metadata.docsUrl}`,
+      `This wizard uses an LLM agent to intelligently modify your project. Please view the docs to set up Raindrop for your ${config.metadata.name} SDK manually instead: ${config.metadata.docsUrl}`,
       0,
     );
   }
@@ -130,14 +130,9 @@ export async function runAgentWizard(
   }
 
   // Build outro message
-  const changes = [...config.ui.getOutroChanges({})].filter(Boolean);
-
   const nextSteps = [...config.ui.getOutroNextSteps({})].filter(Boolean);
 
   const outroMessage = `${chalk.white('Raindrop successfully integrated')}
-
-${chalk.cyan('What the agent did:')}
-${changes.map((change) => `• ${change}`).join('\n')}
 
 ${chalk.yellow('Next steps:')}
 ${nextSteps.map((step) => `• ${step}`).join('\n')}

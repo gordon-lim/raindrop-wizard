@@ -91,12 +91,7 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
   },
 
   ui: {
-    successMessage: 'raindrop.ai integration with Vercel AI SDK complete',
-    getOutroChanges: () => [
-      'Installed raindrop-ai package',
-      'Configured OpenTelemetry trace exporter',
-      'Set up Vercel AI SDK telemetry instrumentation',
-    ],
+    successMessage: 'Raindrop integration with Vercel AI SDK complete',
     getOutroNextSteps: () => [
       'Configure RAINDROP_WRITE_KEY in environment variables',
       'Enable telemetry in your AI SDK calls',

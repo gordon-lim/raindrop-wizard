@@ -1,5 +1,5 @@
 /**
- * Shared agent interface for raindrop.ai wizards
+ * Shared agent interface for  wizards
  * Uses Claude Agent SDK directly with streaming input support
  */
 
@@ -16,15 +16,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 // Create a require function for ESM compatibility
 const require = createRequire(import.meta.url);
-
-// Dynamic import cache for ESM module
-let _sdkModule: any = null;
-async function getSDKModule(): Promise<any> {
-  if (!_sdkModule) {
-    _sdkModule = await import('@anthropic-ai/claude-agent-sdk');
-  }
-  return _sdkModule;
-}
 
 /**
  * Get the path to the bundled Claude Code CLI from the SDK package.
@@ -146,8 +137,8 @@ export async function runAgentLoop(
   config?: RunAgentConfig,
 ): Promise<AgentRunResult> {
   const {
-    spinnerMessage = 'Customizing your raindrop.ai setup...',
-    successMessage = 'raindrop.ai integration complete',
+    spinnerMessage = 'Customizing your  setup...',
+    successMessage = 'Raindrop integration complete',
     resume,
   } = config ?? {};
 

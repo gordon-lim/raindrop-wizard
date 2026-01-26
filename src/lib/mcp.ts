@@ -17,7 +17,7 @@ export function createCompletionMcpServer(
 ): any {
   const completionTool = tool(
     'CompleteIntegration',
-    'Signals that the raindrop.ai integration is complete. Call this tool ONLY after you have: 1) Successfully installed the raindrop.ai package, 2) Integrated raindrop.ai into all relevant LLM API call sites, and 3) Verified the project builds/runs without errors.',
+    'Signals that the Raindrop integration is complete. Call this tool ONLY after you have: 1) Successfully installed the Raindrop package, 2) Integrated Raindrop into all relevant LLM API call sites, and 3) Verified the project builds/runs without errors.',
     z.object({}), // No input parameters
     async (_args: Record<string, never>, _extra: unknown): Promise<any> => {
       logToFile('Agent called CompleteIntegration tool - integration is complete');
