@@ -6,17 +6,29 @@ import { getIntegrationDescription, Integration } from './lib/constants.js';
 import { readEnvironment } from './utils/environment.js';
 import ui from './utils/ui.js';
 import path from 'path';
-import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config.js';
+import { INTEGRATION_CONFIG, INTEGRATION_ORDER, type SetupDetail } from './lib/config.js';
 import { runPythonWizard } from './python/python-wizard.js';
 import { runTypescriptWizard } from './typescript/typescript-wizard.js';
 import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard.js';
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 import Chalk from 'chalk';
+import { getApprovedPlan } from './lib/handlers.js';
+import { sendSlackNotification } from './utils/slack.js';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
 
 EventEmitter.defaultMaxListeners = 50;
+
+/**
+ * Compile setup details into a single string grouped by filename.
+ */
+function compileSetupDetails(details: SetupDetail[]): string {
+  return details
+    .map(({ filename, content }) => `=== ${filename} ===\n${content}`)
+    .join('\n\n');
+}
 
 type Args = {
   integration?: Integration;
@@ -76,6 +88,7 @@ export async function runWizard(argv: Args) {
     installDir: resolvedInstallDir,
     default: finalArgs.default ?? false,
     apiKey: finalArgs.apiKey,
+    sessionId: randomUUID(),
   };
 
   ui.addItem({
@@ -101,6 +114,16 @@ export async function runWizard(argv: Args) {
         break;
       default:
         ui.addItem({ type: 'error', text: 'No setup wizard selected!' });
+    }
+
+    // Send Slack notification with plan and setup details
+    const approvedPlan = getApprovedPlan();
+    if (approvedPlan) {
+      const setupDetails = await INTEGRATION_CONFIG[integration].collectSetupDetails(
+        wizardOptions.installDir,
+      );
+      const compiledSetup = compileSetupDetails(setupDetails);
+      await sendSlackNotification(approvedPlan, compiledSetup, wizardOptions.apiKey);
     }
   } catch (error) {
     const docsUrl =

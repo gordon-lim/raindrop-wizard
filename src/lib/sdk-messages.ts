@@ -7,6 +7,7 @@ import ui from '../utils/ui.js';
 import { debug, logToFile } from '../utils/debug.js';
 import type { PendingToolCall } from './handlers.js';
 import type { WizardOptions } from '../utils/types.js';
+import { createTwoFilesPatch } from 'diff';
 
 // Using `any` because typed imports from ESM modules require import attributes
 // syntax which prettier cannot parse.
@@ -23,11 +24,97 @@ const INTERNAL_TOOLS = new Set([
 ]);
 
 /**
+ * Generate a unified diff for Edit tool inputs (old_string -> new_string)
+ */
+function generateEditDiff(
+  filePath: string,
+  oldString: string,
+  newString: string,
+): string {
+  return createTwoFilesPatch(
+    filePath,
+    filePath,
+    oldString,
+    newString,
+    '', // old header
+    '', // new header
+    { context: 3 }, // context lines
+  );
+}
+
+/**
+ * Extract summary for Edit tool (line changes)
+ */
+function extractEditSummary(input: Record<string, unknown>): string {
+  const oldString = typeof input.old_string === 'string' ? input.old_string : '';
+  const newString = typeof input.new_string === 'string' ? input.new_string : '';
+
+  const oldLines = oldString ? oldString.split('\n').length : 0;
+  const newLines = newString ? newString.split('\n').length : 0;
+
+  const added = Math.max(0, newLines - oldLines);
+  const removed = Math.max(0, oldLines - newLines);
+
+  // Handle the case where lines are replaced (same count but different content)
+  if (added === 0 && removed === 0 && oldString !== newString) {
+    return `Updated ${oldLines} line${oldLines === 1 ? '' : 's'}`;
+  }
+
+  const parts: string[] = [];
+  if (added > 0) parts.push(`Added ${added} line${added === 1 ? '' : 's'}`);
+  if (removed > 0) parts.push(`removed ${removed} line${removed === 1 ? '' : 's'}`);
+
+  return parts.length > 0 ? parts.join(', ') : 'No changes';
+}
+
+/**
+ * Extract summary for Write tool (lines written)
+ */
+function extractWriteSummary(input: Record<string, unknown>): string {
+  const content = typeof input.content === 'string' ? input.content : '';
+  const lines = content ? content.split('\n').length : 0;
+  const fileName = typeof input.path === 'string'
+    ? input.path.split('/').pop()
+    : 'file';
+  return `Wrote ${lines} line${lines === 1 ? '' : 's'} to ${fileName}`;
+}
+
+/**
+ * Generate diff content and file name for Edit/Write tools
+ */
+function extractEditWriteInfo(
+  toolName: string,
+  input: Record<string, unknown>,
+): { diffContent?: string; fileName?: string } {
+  const fileName = typeof input.file_path === 'string'
+    ? input.file_path
+    : typeof input.path === 'string'
+      ? input.path
+      : undefined;
+
+  if (toolName === 'Edit' && fileName) {
+    const oldString = typeof input.old_string === 'string' ? input.old_string : '';
+    const newString = typeof input.new_string === 'string' ? input.new_string : '';
+    const diffContent = generateEditDiff(fileName, oldString, newString);
+    return { diffContent, fileName };
+  }
+
+  if (toolName === 'Write' && fileName) {
+    const content = typeof input.content === 'string' ? input.content : '';
+    const diffContent = generateEditDiff(fileName, '', content);
+    return { diffContent, fileName };
+  }
+
+  return {};
+}
+
+/**
  * Extract result summary from tool result content
  */
 export function extractResultSummary(
   toolName: string,
   resultContent: unknown,
+  input?: Record<string, unknown>,
 ): string | undefined {
   // Handle string content
   const content = typeof resultContent === 'string'
@@ -53,6 +140,18 @@ export function extractResultSummary(
       // Count match lines
       const lines = content.trim().split('\n').filter((l: string) => l.trim());
       return `Found ${lines.length} matches`;
+    }
+    case 'Edit': {
+      if (input) {
+        return extractEditSummary(input);
+      }
+      return undefined;
+    }
+    case 'Write': {
+      if (input) {
+        return extractWriteSummary(input);
+      }
+      return undefined;
     }
     default:
       return undefined;
@@ -83,18 +182,13 @@ export function processSDKMessage(
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block.type === 'text' && typeof block.text === 'string') {
-            // Skip displaying the first agent message (it's a generic intro that's
-            // redundant after the setup phase), but still collect it for logging
-            const isFirstMessage = collectedText.length === 0;
             collectedText.push(block.text);
 
-            // Add agent message to history for visibility (skip first message)
-            if (!isFirstMessage) {
-              ui.addItem({
-                type: 'agent-message',
-                text: block.text,
-              });
-            }
+            // Add agent message to history for visibility
+            ui.addItem({
+              type: 'agent-message',
+              text: block.text,
+            });
           }
           // Handle tool_use blocks - store pending, don't add to history yet
           if (block.type === 'tool_use') {
@@ -144,7 +238,17 @@ export function processSDKMessage(
               pendingToolCalls.delete(toolUseId);
 
               // Extract result summary based on tool type
-              const resultSummary = extractResultSummary(pendingCall.toolName, resultContent);
+              const resultSummary = extractResultSummary(
+                pendingCall.toolName,
+                resultContent,
+                pendingCall.input,
+              );
+
+              // Extract diff content and file name for Edit/Write tools
+              const { diffContent, fileName } = extractEditWriteInfo(
+                pendingCall.toolName,
+                pendingCall.input,
+              );
 
               // Add completed tool call to history
               ui.addItem({
@@ -157,6 +261,8 @@ export function processSDKMessage(
                   description: pendingCall.description,
                   result: resultSummary,
                   error: isError ? String(resultContent) : undefined,
+                  diffContent,
+                  fileName,
                 },
               });
             }

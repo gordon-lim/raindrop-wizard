@@ -176,7 +176,11 @@ export async function askForWizardLogin(options: {
     signup: options.signup,
   });
 
-  const userInfo = await getUserInfo(tokenResponse.access_token);
+  return tokenResponse;
+}
+
+export async function validateProjectAccess(accessToken: string): Promise<void> {
+  const userInfo = await getUserInfo(accessToken);
   const orgIds = Object.keys(userInfo.org_id_to_org_info || {});
   const projectId = orgIds[0];
 
@@ -187,7 +191,6 @@ export async function askForWizardLogin(options: {
     ui.addItem({ type: 'error', text: error.message });
     abort();
   }
-  return tokenResponse;
 }
 
 /**

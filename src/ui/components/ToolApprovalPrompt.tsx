@@ -30,7 +30,7 @@ export function ToolApprovalPrompt({
   props,
 }: ToolApprovalPromptComponentProps): React.ReactElement {
   const { toolName, input, diffContent, fileName, description } = props;
-  const { resolvePending, addItem } = useWizardActions();
+  const { resolvePending } = useWizardActions();
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState('');
@@ -64,19 +64,6 @@ export function ToolApprovalPrompt({
         ? { behavior: 'allow', updatedInput: input }
         : { behavior: 'deny', message: 'User denied this action' };
 
-    addItem({
-      type: 'tool-call',
-      text: `${toolName}: ${item.value === 'allow' ? 'Approved' : 'Denied'}`,
-      toolCall: {
-        toolName,
-        description,
-        status: item.value === 'allow' ? 'success' : 'denied',
-        input,
-        diffContent,
-        fileName,
-      },
-    });
-
     resolvePending(result);
   };
 
@@ -86,19 +73,6 @@ export function ToolApprovalPrompt({
       behavior: 'deny',
       message: feedback || 'User denied this action',
     };
-
-    addItem({
-      type: 'tool-call',
-      text: `${toolName}: Denied with feedback`,
-      toolCall: {
-        toolName,
-        description,
-        status: 'denied',
-        input,
-        diffContent,
-        fileName,
-      },
-    });
 
     resolvePending(result);
   };

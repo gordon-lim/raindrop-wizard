@@ -19,7 +19,6 @@ if (!satisfies(process.version, NODE_VERSION_RANGE)) {
 import type { WizardOptions } from './src/utils/types.js';
 import { runWizard } from './src/run.js';
 import { isNonInteractiveEnvironment } from './src/utils/environment.js';
-import { sendSlackNotification } from './src/utils/slack.js';
 import ui, { initWizardUI } from './src/utils/ui.js';
 
 yargs(hideBin(process.argv))
@@ -91,7 +90,6 @@ yargs(hideBin(process.argv))
 
       try {
         await runWizard(options as unknown as WizardOptions);
-        await sendSlackNotification();
         process.exit(0);
       } catch (error) {
         ui.addItem({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` });

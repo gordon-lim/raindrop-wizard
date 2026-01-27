@@ -47,11 +47,14 @@ export interface ReceivedEvent {
 }
 
 /**
- * Fetch events from the API endpoint
+ * Fetch events from the API endpoint, filtered by wizard session ID
  */
-async function fetchEvents(accessToken: string): Promise<ApiEvent[]> {
+async function fetchEvents(accessToken: string, wizardSessionId: string): Promise<ApiEvent[]> {
   try {
-    const response = await fetch(EVENTS_LIST_ENDPOINT, {
+    const url = new URL(EVENTS_LIST_ENDPOINT);
+    url.searchParams.set('wizardSession', wizardSessionId);
+
+    const response = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -93,7 +96,7 @@ export async function testIntegration(
   // Start polling in the background
   const pollPromise = (async () => {
     while (isPolling) {
-      const events = await fetchEvents(accessToken);
+      const events = await fetchEvents(accessToken, options.sessionId);
 
       for (const event of events) {
         // Skip events we've already seen
@@ -137,29 +140,27 @@ export async function testIntegration(
 
   logToFile(`Polling stopped, received ${receivedEvents.length} events`);
 
-  // Ask if results look good
-  const resultsGood = await ui.select({
-    message: `Do the results look good?`,
+  // Ask if results look good (with inline text input for feedback)
+  const result = await ui.feedbackSelect({
+    message: 'Do the results look good?',
     options: [
       { value: true, label: 'Yes, looks good - proceed' },
-      { value: false, label: 'No, I need to provide feedback' },
+      { value: false, label: 'No, I need to provide feedback', allowTextInput: true },
     ],
   });
 
-  if (resultsGood) {
+  // User selected "Yes, looks good"
+  if (result.type === 'option' && result.value === true) {
     return { shouldRetry: false };
   }
 
-  // User wants to provide feedback
-  const userFeedback = await ui.text({
-    message: 'Provide feedback on the issues:',
-    placeholder: 'e.g., "user_id is missing" or "wrong endpoint"',
-  });
+  // User typed feedback
+  const userFeedback = result.value as string;
 
   // Build feedback prompt for agent
   const feedbackPrompt = buildTestFeedbackMessage(
     receivedEvents,
-    userFeedback as string,
+    userFeedback,
   );
 
   return { shouldRetry: true, feedbackPrompt };

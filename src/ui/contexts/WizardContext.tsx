@@ -25,6 +25,8 @@ import type {
   PersistentInputProps,
   ToolCallInfo,
   AgentQueryHandle,
+  FeedbackSelectOptions,
+  FeedbackSelectResult,
 } from '../types.js';
 
 /**
@@ -104,7 +106,8 @@ export type PendingItemType =
   | 'tool-approval'
   | 'clarifying-questions'
   | 'plan-approval'
-  | 'persistent-input';
+  | 'persistent-input'
+  | 'feedback-select';
 
 /**
  * Spinner-specific props
@@ -123,7 +126,8 @@ export type PendingItemProps =
   | ToolApprovalProps
   | ClarifyingQuestionsProps
   | PlanApprovalProps
-  | PersistentInputProps;
+  | PersistentInputProps
+  | FeedbackSelectOptions<unknown>;
 
 /**
  * A pending item represents an active prompt or spinner
@@ -158,12 +162,14 @@ export interface AgentState {
 export interface WizardState {
   /** Completed history items (rendered in Static) */
   history: HistoryItem[];
-  /** Currently active prompt/spinner (rendered as pending) */
+  /** Currently active prompt (rendered as pending) */
   pendingItem: PendingItem | null;
   /** Whether the app is ready to exit */
   shouldExit: boolean;
   /** Agent execution state */
   agentState: AgentState;
+  /** Active spinner message (separate from pendingItem so both can be visible) */
+  activeSpinner: string | null;
 }
 
 /**
@@ -213,12 +219,22 @@ export interface WizardActions {
   planApproval: (props: PlanApprovalProps) => Promise<PlanApprovalResult>;
 
   /**
+   * Show feedback select prompt (select with inline text input option)
+   * Used for "yes/no with feedback" patterns
+   */
+  feedbackSelect: <T>(
+    options: FeedbackSelectOptions<T>,
+  ) => Promise<FeedbackSelectResult<T>>;
+
+  /**
    * Start persistent input mode during agent execution
    * Sets pendingItem to persistent-input type
    */
-  startPersistentInput: (callbacks: {
+  startPersistentInput: (config: {
     onSubmit: (message: string) => void;
     onInterrupt: () => void;
+    message?: string;
+    placeholder?: string;
   }) => void;
 
   /**
@@ -286,21 +302,50 @@ export function WizardProvider({
 }: WizardProviderProps): React.ReactElement {
   // State
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [pendingItem, setPendingItem] = useState<PendingItem | null>(null);
+  // Queue of pending items - processes one at a time, FIFO order
+  // This allows multiple tool approvals to be queued without losing earlier ones
+  // Note: persistent-input is NOT stored in queue, it's a fallback shown when queue is empty
+  const [pendingQueue, setPendingQueue] = useState<PendingItem[]>([]);
   const [shouldExit, setShouldExit] = useState(false);
   const [agentState, setAgentStateInternal] = useState<AgentState>({
     isRunning: false,
   });
+  // Spinner state - separate from pendingItem so both can be visible
+  const [activeSpinner, setActiveSpinner] = useState<string | null>(null);
+
+  // Persistent input config - stored separately, shown as fallback when queue is empty
+  const [persistentInputConfig, setPersistentInputConfig] = useState<{
+    onSubmit: (message: string) => void;
+    onInterrupt: () => void;
+    message?: string;
+    placeholder?: string;
+  } | null>(null);
+
+  // Derive current pending item:
+  // 1. If queue has items → show first item in queue
+  // 2. If queue is empty AND persistent input is active → show persistent input
+  // 3. Otherwise → null
+  const pendingItem: PendingItem | null = useMemo(() => {
+    if (pendingQueue.length > 0) {
+      return pendingQueue[0];
+    }
+    if (persistentInputConfig) {
+      return {
+        type: 'persistent-input',
+        props: {
+          onSubmit: persistentInputConfig.onSubmit,
+          onInterrupt: persistentInputConfig.onInterrupt,
+          placeholder: persistentInputConfig.placeholder ?? 'Type a message or press Esc to interrupt...',
+          message: persistentInputConfig.message,
+        } as PersistentInputProps,
+        resolve: () => {},
+      };
+    }
+    return null;
+  }, [pendingQueue, persistentInputConfig]);
 
   // Counter for unique IDs
   const idCounter = useRef(0);
-
-  // Ref for persistent input callbacks and config (immediately available, no state delay)
-  const persistentInputConfigRef = useRef<{
-    onSubmit: (message: string) => void;
-    onInterrupt: () => void;
-    spinnerMessage?: string;
-  } | null>(null);
 
   // Get next unique ID
   const getNextId = useCallback(() => {
@@ -315,75 +360,67 @@ export function WizardProvider({
     [getNextId],
   );
 
-  // Resolve current pending item
+  // Resolve current pending item and advance the queue
   const resolvePending = useCallback((value: unknown) => {
-    setPendingItem((current) => {
-      if (current) {
-        current.resolve(value);
+    setPendingQueue((queue) => {
+      if (queue.length > 0) {
+        // Resolve the first item in the queue
+        queue[0].resolve(value);
+        // Return the queue without the first item (shift)
+        return queue.slice(1);
       }
-      return null;
+      return queue;
     });
   }, []);
 
-  // Show select prompt
+  // Show select prompt - adds to queue
   const select = useCallback(
     <T,>(options: SelectOptions<T>): Promise<T | symbol> => {
       return new Promise((resolve) => {
-        setPendingItem({
-          type: 'select',
-          props: options as SelectOptions<unknown>,
-          resolve: resolve as (value: unknown) => void,
-        });
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'select',
+            props: options as SelectOptions<unknown>,
+            resolve: resolve as (value: unknown) => void,
+          },
+        ]);
       });
     },
     [],
   );
 
-  // Show text prompt
+  // Show text prompt - adds to queue
   const text = useCallback(
     (options: TextOptions): Promise<string | symbol> => {
       return new Promise((resolve) => {
-        setPendingItem({
-          type: 'text',
-          props: options,
-          resolve: resolve as (value: unknown) => void,
-        });
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'text',
+            props: options,
+            resolve: resolve as (value: unknown) => void,
+          },
+        ]);
       });
     },
     [],
   );
 
-  // Spinner ref to manage spinner state
-  const spinnerResolve = useRef<((value: unknown) => void) | null>(null);
-
-  // Show spinner
+  // Show spinner - uses separate activeSpinner state so it can be visible alongside pendingItem
   const spinner = useCallback((): SpinnerInstance => {
     return {
       start: (msg = '') => {
-        setPendingItem({
-          type: 'spinner',
-          props: { message: msg },
-          resolve: (value) => {
-            spinnerResolve.current?.(value);
-          },
-        });
+        setActiveSpinner(msg || 'Working...');
       },
       stop: (msg = '') => {
         if (msg) {
           addItem({ type: 'spinner-result', text: msg });
         }
-        setPendingItem(null);
+        setActiveSpinner(null);
       },
       message: (msg: string) => {
-        setPendingItem((current) => {
-          if (current?.type === 'spinner') {
-            return {
-              ...current,
-              props: { message: msg },
-            };
-          }
-          return current;
-        });
+        setActiveSpinner(msg);
       },
     };
   }, [addItem]);
@@ -398,88 +435,89 @@ export function WizardProvider({
   // Agent-related actions
   // ========================================================================
 
-  // Helper to restore persistent input after approval/questions prompts
-  const restorePersistentInput = useCallback(() => {
-    const config = persistentInputConfigRef.current;
-    if (config) {
-      setPendingItem({
-        type: 'persistent-input',
-        props: {
-          onSubmit: config.onSubmit,
-          onInterrupt: config.onInterrupt,
-          placeholder: 'Type a message or press Esc to interrupt...',
-          spinnerMessage: config.spinnerMessage,
-        } as PersistentInputProps,
-        resolve: () => {},
-      });
-    }
-  }, []);
-
-  // Show tool approval prompt
+  // Show tool approval prompt - adds to queue
+  // Persistent input automatically shows when queue becomes empty (it's a fallback, not in queue)
   const toolApproval = useCallback(
     (props: ToolApprovalProps): Promise<ToolApprovalResult> => {
       return new Promise((resolve) => {
-        setPendingItem({
-          type: 'tool-approval',
-          props,
-          resolve: (result) => {
-            // Restore persistent input after user responds
-            restorePersistentInput();
-            resolve(result as ToolApprovalResult);
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'tool-approval',
+            props,
+            resolve: resolve as (value: unknown) => void,
           },
-        });
+        ]);
       });
     },
-    [restorePersistentInput],
+    [],
   );
 
-  // Show clarifying questions prompt
+  // Show clarifying questions prompt - adds to queue
+  // Persistent input automatically shows when queue becomes empty
   const clarifyingQuestions = useCallback(
     (props: ClarifyingQuestionsProps): Promise<ClarifyingQuestionsResult> => {
       return new Promise((resolve) => {
-        setPendingItem({
-          type: 'clarifying-questions',
-          props,
-          resolve: (result) => {
-            // Restore persistent input after user responds
-            restorePersistentInput();
-            resolve(result as ClarifyingQuestionsResult);
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'clarifying-questions',
+            props,
+            resolve: resolve as (value: unknown) => void,
           },
-        });
+        ]);
       });
     },
-    [restorePersistentInput],
+    [],
   );
 
-  // Show plan approval prompt
+  // Show plan approval prompt - adds to queue
+  // Persistent input automatically shows when queue becomes empty
   const planApproval = useCallback(
     (props: PlanApprovalProps): Promise<PlanApprovalResult> => {
       return new Promise((resolve) => {
-        setPendingItem({
-          type: 'plan-approval',
-          props,
-          resolve: (result) => {
-            // Restore persistent input after user responds
-            restorePersistentInput();
-            resolve(result as PlanApprovalResult);
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'plan-approval',
+            props,
+            resolve: resolve as (value: unknown) => void,
           },
-        });
+        ]);
       });
     },
-    [restorePersistentInput],
+    [],
   );
 
-  // Start persistent input mode
+  // Show feedback select prompt - adds to queue
+  const feedbackSelect = useCallback(
+    <T,>(options: FeedbackSelectOptions<T>): Promise<FeedbackSelectResult<T>> => {
+      return new Promise((resolve) => {
+        setPendingQueue((queue) => [
+          ...queue,
+          {
+            type: 'feedback-select',
+            props: options as FeedbackSelectOptions<unknown>,
+            resolve: resolve as (value: unknown) => void,
+          },
+        ]);
+      });
+    },
+    [],
+  );
+
+  // Start persistent input mode - sets config so it shows as fallback when queue is empty
   const startPersistentInput = useCallback(
     (config: {
       onSubmit: (message: string) => void;
       onInterrupt: () => void;
-      spinnerMessage?: string;
+      message?: string;
+      placeholder?: string;
     }) => {
-      // Store config in ref for immediate access during restoration
-      persistentInputConfigRef.current = config;
+      // Store config - persistent input will automatically show when queue is empty
+      setPersistentInputConfig(config);
 
-      // Also store callbacks in state for external access if needed
+      // Also store callbacks in agent state for external access if needed
       setAgentStateInternal((current) => ({
         ...current,
         persistentInputCallbacks: {
@@ -487,32 +525,13 @@ export function WizardProvider({
           onInterrupt: config.onInterrupt,
         },
       }));
-
-      setPendingItem({
-        type: 'persistent-input',
-        props: {
-          onSubmit: config.onSubmit,
-          onInterrupt: config.onInterrupt,
-          placeholder: 'Type a message or press Esc to interrupt...',
-          spinnerMessage: config.spinnerMessage,
-        } as PersistentInputProps,
-        resolve: () => {},
-      });
     },
     [],
   );
 
-  // Stop persistent input mode
+  // Stop persistent input mode - clears config so it no longer shows
   const stopPersistentInput = useCallback(() => {
-    // Clear the ref
-    persistentInputConfigRef.current = null;
-
-    setPendingItem((current) => {
-      if (current?.type === 'persistent-input') {
-        return null;
-      }
-      return current;
-    });
+    setPersistentInputConfig(null);
 
     setAgentStateInternal((current) => ({
       ...current,
@@ -537,6 +556,7 @@ export function WizardProvider({
       toolApproval,
       clarifyingQuestions,
       planApproval,
+      feedbackSelect,
       startPersistentInput,
       stopPersistentInput,
       setAgentState,
@@ -551,6 +571,7 @@ export function WizardProvider({
       toolApproval,
       clarifyingQuestions,
       planApproval,
+      feedbackSelect,
       startPersistentInput,
       stopPersistentInput,
       setAgentState,
@@ -564,8 +585,9 @@ export function WizardProvider({
       pendingItem,
       shouldExit,
       agentState,
+      activeSpinner,
     }),
-    [history, pendingItem, shouldExit, agentState],
+    [history, pendingItem, shouldExit, agentState, activeSpinner],
   );
 
   // Context value

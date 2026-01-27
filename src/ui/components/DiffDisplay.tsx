@@ -38,7 +38,7 @@ function parseDiff(diffContent: string): DiffLine[] {
 
     // File header lines
     if (line.startsWith('--- ') || line.startsWith('+++ ')) {
-      result.push({ type: 'header', content: line });
+      // result.push({ type: 'header', content: line }); // Skip file header lines
       continue;
     }
 

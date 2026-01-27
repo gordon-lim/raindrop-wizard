@@ -176,6 +176,10 @@ export async function runAgentLoop(
     const hasCompletedWorkRef = { value: false };
     const isInterruptingRef = { value: false };
     const waitingForUserInputRef = { value: false };
+    const pendingUserMessageRef = { value: null as string | null };
+
+    // Promise resolver for waiting on user input after interrupt
+    let resolveUserMessage: ((message: string) => void) | null = null;
 
     // Query handle for external control (interrupt, etc.)
     handle = createAgentQueryHandle({
@@ -188,19 +192,35 @@ export async function runAgentLoop(
     // Create MCP server with CompleteIntegration tool
     const completionMcpServer = createCompletionMcpServer(hasCompletedWorkRef);
 
+    // Define callbacks for persistent input
+    const handlePersistentSubmit = async (message: string) => {
+      if (isInterruptingRef.value) {
+        // Already interrupted - resolve the waiting promise with this message
+        logToFile('User submitted message after interrupt:', message);
+        pendingUserMessageRef.value = message;
+        if (resolveUserMessage) {
+          resolveUserMessage(message);
+          resolveUserMessage = null;
+        }
+      } else {
+        // Not yet interrupted - store message and trigger interrupt
+        pendingUserMessageRef.value = message;
+        logToFile('User submitted message while agent running - triggering interrupt');
+        handle.interrupt();
+      }
+    };
+
+    const handlePersistentInterrupt = () => {
+      logToFile('User requested interrupt (Esc)');
+      // Stop spinner immediately - persistent input stays visible
+      spinner.stop();
+      handle.interrupt();
+    };
+
     spinner.start(spinnerMessage);
     ui.startPersistentInput({
-      onSubmit: async () => {
-        // Submitting while agent is running triggers interrupt
-        // The user's message will be collected after the interrupt completes
-        logToFile('User submitted while agent running - triggering interrupt');
-        handle.interrupt();
-      },
-      onInterrupt: () => {
-        logToFile('User requested interrupt (Esc)');
-        handle.interrupt();
-      },
-      spinnerMessage: spinnerMessage,
+      onSubmit: handlePersistentSubmit,
+      onInterrupt: handlePersistentInterrupt,
     });
 
     queryObject = query({
@@ -258,19 +278,34 @@ export async function runAgentLoop(
       }
 
       spinner.stop();
-      ui.stopPersistentInput();
       ui.setAgentState({ isRunning: false });
 
-      // Prompt user for their next message (different placeholder based on context)
-      const userMessage = await ui.text({
-        message: wasInterrupted ? 'What would you like the agent to do?' : '',
-        placeholder: wasInterrupted ? 'Type your message...' : 'Type your response...',
-      });
+      // Get the resume message - either from pending submit or wait for user to submit
+      let userMessage: string;
 
-      // Check if user cancelled
-      if (typeof userMessage === 'symbol') {
-        logToFile('User cancelled input, ending session');
-        return { sessionId, handle };
+      if (pendingUserMessageRef.value) {
+        // Message was submitted during execution - use it directly
+        userMessage = pendingUserMessageRef.value;
+        pendingUserMessageRef.value = null; // Clear for next iteration
+        logToFile('Using pending user message:', userMessage);
+      } else {
+        // No pending message - wait for user to submit via persistent input
+        logToFile('Waiting for user to submit message via persistent input...');
+
+        // Persistent input is already visible, spinner already stopped - just wait for user
+
+        userMessage = await new Promise<string>((resolve) => {
+          resolveUserMessage = resolve;
+        });
+
+        // Check if user cancelled (empty message from Esc)
+        if (!userMessage) {
+          logToFile('User cancelled input, ending session');
+          ui.stopPersistentInput();
+          return { sessionId, handle };
+        }
+
+        logToFile('Received user message from persistent input:', userMessage);
       }
 
       // Show user message in UI

@@ -6,6 +6,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { ToolCallInfo, ToolCallStatus } from '../types.js';
+import { DiffDisplay } from './DiffDisplay.js';
 
 interface ToolCallDisplayProps {
   toolCall: ToolCallInfo;
@@ -67,6 +68,14 @@ function formatToolDisplay(
       const filePath = getRelativePath(input?.file_path ?? input?.path);
       return { name: 'Read', params: `(${filePath})` };
     }
+    case 'Edit': {
+      const filePath = getRelativePath(input?.file_path ?? input?.path);
+      return { name: 'Update', params: `(${filePath})` };
+    }
+    case 'Write': {
+      const filePath = getRelativePath(input?.file_path ?? input?.path);
+      return { name: 'Write', params: `(${filePath})` };
+    }
     default:
       return { name: toolName, params: null };
   }
@@ -78,7 +87,7 @@ function formatToolDisplay(
 export function ToolCallDisplay({
   toolCall,
 }: ToolCallDisplayProps): React.ReactElement {
-  const { toolName, status, result, error, input } = toolCall;
+  const { toolName, status, result, error, input, diffContent } = toolCall;
   const { symbol, color } = getStatusIndicator(status);
   const { name, params } = formatToolDisplay(toolName, input);
 
@@ -86,6 +95,11 @@ export function ToolCallDisplay({
   const subtitle = toolName === 'Bash' 
     ? (typeof input?.command === 'string' ? input.command : null)
     : null;
+
+  // Check if this is an Edit or Write tool that should show diff
+  const shouldShowDiff = (toolName === 'Edit' || toolName === 'Write') && 
+    status === 'success' && 
+    diffContent;
 
   return (
     <Box flexDirection="column">
@@ -104,11 +118,18 @@ export function ToolCallDisplay({
         </Box>
       )}
 
-      {/* Result or error if completed */}
+      {/* Result summary (e.g., "Added 1 line, removed 1 line") */}
       {status === 'success' && result && (
         <Box marginLeft={2}>
           <Text dimColor>└─ </Text>
           <Text color="green">{result}</Text>
+        </Box>
+      )}
+
+      {/* Diff content for Edit/Write tools */}
+      {shouldShowDiff && (
+        <Box marginLeft={2} marginTop={1}>
+          <DiffDisplay diffContent={diffContent} maxHeight={15} />
         </Box>
       )}
 

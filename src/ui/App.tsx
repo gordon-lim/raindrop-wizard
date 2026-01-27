@@ -4,11 +4,13 @@
  *
  * Architecture:
  * - <Static> renders completed history items once and "freezes" them
- * - pendingItem re-renders frequently during active prompts/spinners
+ * - activeSpinner renders above the pending item when agent is working
+ * - pendingItem re-renders frequently during active prompts
  */
 
 import React, { useMemo } from 'react';
-import { Box, Static } from 'ink';
+import { Box, Static, Text } from 'ink';
+import InkSpinner from 'ink-spinner';
 import { useWizardState } from './contexts/WizardContext.js';
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { PendingPrompt } from './components/PendingPrompt.js';
@@ -18,7 +20,7 @@ import type { HistoryItem } from './contexts/WizardContext.js';
  * Main wizard app component
  */
 export function WizardApp(): React.ReactElement {
-  const { history, pendingItem } = useWizardState();
+  const { history, pendingItem, activeSpinner } = useWizardState();
 
   // Memoize history items to prevent unnecessary re-renders
   const historyItems = useMemo(
@@ -35,6 +37,16 @@ export function WizardApp(): React.ReactElement {
     <Box flexDirection="column">
       {/* Static section: completed items rendered once */}
       <Static items={historyItems}>{(item) => item}</Static>
+
+      {/* Spinner: shown above pending item when active */}
+      {activeSpinner && (
+        <Box marginBottom={1}>
+          <Text color="cyan">
+            <InkSpinner type="dots" />
+          </Text>
+          <Text> {activeSpinner}</Text>
+        </Box>
+      )}
 
       {/* Pending section: actively updating content */}
       {pendingItem && <PendingPrompt item={pendingItem} />}

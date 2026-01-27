@@ -35,6 +35,12 @@ export type WizardOptions = {
    * Personal API key (phx_xxx) - optional, not currently used
    */
   apiKey?: string;
+
+  /**
+   * Unique session ID (UUID) generated at wizard startup.
+   * Used to identify events from this wizard run.
+   */
+  sessionId: string;
 };
 
 export interface Feature {

@@ -50,6 +50,7 @@ const result = await generateText({
         userId: 'user_123', // Required
         eventName: 'story_generation',
         convoId: 'convo_123',
+        wizardSession: '__WIZARD_SESSION_UUID__' // Required
       }),
     },
   },

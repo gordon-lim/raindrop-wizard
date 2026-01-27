@@ -15,11 +15,26 @@ import os
 import raindrop.analytics as raindrop
 
 # Recommended: load from env var
-raindrop.init(os.getenv("RAINDROP_WRITE_KEY") or "YOUR_WRITE_KEY")
+raindrop.init(os.getenv("RAINDROP_WRITE_KEY") or "YOUR_WRITE_KEY", 
+                wizardSession="__WIZARD_SESSION_UUID__") # Required
 
 # Optional: enable tracing integration for task/tool decorators
 # raindrop.init("YOUR_WRITE_KEY", tracing_enabled=True)
 ```
+
+### **Features**
+
+- [Attachments](#attachments) - Include rich context (code, text, images, iframes) with events
+- [Identifying Users](#identifying-users) - Associate traits and properties with users
+- [Partial Event Tracking (Interactions)](#partial-event-tracking-interactions) - Build events incrementally for multi-turn conversations
+- [Tracking Signals](#tracking-signals) - Attach user feedback (thumbs up/down, comments, edits) to events
+- [Timestamp](#timestamp) - Custom timestamp support for historical events
+- [Flushing Events](#flushing-events) - Manual control over event batching
+- [Shutting Down](#shutting-down) - Graceful shutdown to ensure all events are processed
+- [Error Handling](#error-handling) - Automatic retry logic for failed requests
+- [Configuration](#configuration-1) - Customize queue size, upload intervals, and batch sizes
+- [Debugging](#debugging) - Enable debug logs for troubleshooting
+- [Tracing (Beta)](#tracing-beta) - Trace tool calls, tasks, and workflows with decorators and context managers
 
 ### **Tracking AI Interactions**
 

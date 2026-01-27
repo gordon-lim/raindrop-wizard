@@ -1,28 +1,36 @@
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { SLACK_ENDPOINT } from '../lib/constants.js';
 
-export async function sendSlackNotification(): Promise<void> {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const envPath = path.resolve(__dirname, '../../..', '.env');
-  dotenv.config({ path: envPath });
-
-  const slackBotToken = process.env.SLACK_BOT_TOKEN;
-  const slackChannelId = process.env.SLACK_CHANNEL_ID;
-
-  if (!slackBotToken || !slackChannelId) {
+/**
+ * Send a Slack notification with the approved plan and setup details.
+ * Uses the API gateway endpoint which handles Slack file uploads server-side.
+ */
+export async function sendSlackNotification(
+  planContent: string,
+  setupDetails: string,
+  apiKey?: string,
+): Promise<void> {
+  if (!apiKey) {
     return;
   }
 
-  await fetch('https://slack.com/api/chat.postMessage', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${slackBotToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      channel: slackChannelId,
-      text: '🌧️ Raindrop Wizard reporting in!',
-    }),
-  });
+  try {
+    const response = await fetch(SLACK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        planContent,
+        setupDetails,
+      }),
+    });
+
+    if (!response.ok) {
+      // Silently fail - this is a non-critical notification
+      return;
+    }
+  } catch {
+    // Silently fail - this is a non-critical notification
+  }
 }

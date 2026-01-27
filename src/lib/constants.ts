@@ -31,9 +31,208 @@ export const OAUTH_TOKEN_URL = `${OAUTH_URL}/propelauth/oauth/token`;
 export const OAUTH_USERINFO_URL = `${OAUTH_URL}/propelauth/oauth/userinfo`;
 export const OAUTH_PORT = 8259;
 export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_PORT}/callback`;
-export const TEST_PORT = 1234;
-export const TEST_URL = `http://localhost:${TEST_PORT}/`;
-
 export const API_BASE_URL = 'http://localhost:3000';
 export const API_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;
 export const EVENTS_LIST_ENDPOINT = `${API_BASE_URL}/api/cli/events/list`;
+export const ANTHROPIC_BASE_URL = `${API_BASE_URL}/api/cli`;
+export const SLACK_ENDPOINT = `${API_BASE_URL}/api/cli/slack`;
+
+/**
+ * Safe bash command patterns that can be auto-approved without user confirmation.
+ * Uses simple prefix matching with optional * wildcard at the end.
+ */
+export const SAFE_BASH_PATTERNS: string[] = [
+  // === Package Managers - Install/Lock ===
+  'npm install*',
+  'npm ci*',
+  'npm run *',
+  'npm test*',
+  'npm run build*',
+  'npm run lint*',
+  'npm run format*',
+  'npm ls*',
+  'npm outdated*',
+  'npm audit*',
+  'npx *',
+
+  'yarn',
+  'yarn install*',
+  'yarn add *',
+  'yarn run *',
+  'yarn test*',
+  'yarn build*',
+  'yarn lint*',
+  'yarn dlx *',
+
+  'pnpm install*',
+  'pnpm add *',
+  'pnpm run *',
+  'pnpm test*',
+  'pnpm dlx *',
+
+  'bun install*',
+  'bun add *',
+  'bun run *',
+  'bun test*',
+  'bunx *',
+
+  'pip install*',
+  'pip3 install*',
+  'pip list*',
+  'pip show*',
+  'pip freeze*',
+
+  'poetry install*',
+  'poetry add *',
+  'poetry lock*',
+  'poetry show*',
+
+  'uv pip install*',
+  'uv pip list*',
+  'uv sync*',
+
+  'cargo build*',
+  'cargo test*',
+  'cargo run*',
+  'cargo check*',
+  'cargo clippy*',
+  'cargo fmt*',
+
+  'go build*',
+  'go test*',
+  'go run*',
+  'go mod tidy*',
+  'go mod download*',
+  'go get*',
+  'go fmt*',
+
+  'bundle install*',
+  'bundle exec *',
+  'gem install*',
+
+  'composer install*',
+  'composer require *',
+
+  'dotnet build*',
+  'dotnet test*',
+  'dotnet restore*',
+  'dotnet run*',
+
+  'mix deps.get*',
+  'mix compile*',
+  'mix test*',
+
+  // === Type Checking / Linting / Formatting ===
+  'tsc*',
+  'eslint *',
+  'prettier *',
+  'biome *',
+  'mypy *',
+  'python -m mypy*',
+  'ruff *',
+  'black *',
+  'flake8 *',
+  'pylint *',
+  'pyright*',
+  'rubocop*',
+  'rustfmt*',
+  'gofmt*',
+  'swiftlint*',
+  'ktlint*',
+
+  // === Build Tools ===
+  'make',
+  'make build*',
+  'make test*',
+  'make lint*',
+  'make check*',
+  'cmake *',
+  'gradle build*',
+  'gradle test*',
+  './gradlew build*',
+  './gradlew test*',
+  'mvn compile*',
+  'mvn test*',
+  'mvn package*',
+
+  // === Testing ===
+  'jest*',
+  'vitest*',
+  'mocha*',
+  'pytest*',
+  'python -m pytest*',
+  'npx playwright test*',
+  'npx cypress run*',
+  'npx jest*',
+  'npx vitest*',
+
+  // === Git (read-only operations) ===
+  'git status*',
+  'git diff*',
+  'git log*',
+  'git show*',
+  'git branch*',
+  'git fetch*',
+  'git remote -v*',
+  'git ls-files*',
+  'git rev-parse*',
+
+  // === File/Directory Info (read-only) ===
+  'ls *',
+  'ls',
+  'cat *',
+  'head *',
+  'tail *',
+  'less *',
+  'find *',
+  'grep *',
+  'rg *',
+  'ag *',
+  'tree*',
+  'pwd',
+  'wc *',
+  'file *',
+  'stat *',
+  'du *',
+  'df *',
+
+  // === Environment/System Info ===
+  'which *',
+  'whereis *',
+  'type *',
+  'command -v *',
+  'node --version*',
+  'node -v*',
+  'npm --version*',
+  'npm -v*',
+  'python --version*',
+  'python -V*',
+  'python3 --version*',
+  '*--version',
+  '*-v',
+  '*-V',
+  'env',
+  'printenv*',
+  'echo *',
+  'uname*',
+  'hostname',
+  'whoami',
+  'date',
+  'uptime',
+
+  // === Docker (read-only / safe) ===
+  'docker ps*',
+  'docker images*',
+  'docker logs*',
+  'docker inspect*',
+  'docker-compose ps*',
+  'docker-compose logs*',
+  'docker build*',
+  'docker compose build*',
+  'docker compose up*',
+
+  // === Directory Navigation ===
+  'cd *',
+  'pushd *',
+  'popd',
+];

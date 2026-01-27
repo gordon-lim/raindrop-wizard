@@ -69,6 +69,40 @@ function formatOtelProviderInfo(otelProvider: string): string {
 }
 
 /**
+ * Format first action instructions for the agent based on framework
+ */
+function formatFirstActionInstructions(frameworkName: string): string {
+  if (frameworkName === 'TypeScript' || frameworkName === 'Python') {
+    return `## First Action
+
+Your first action MUST be to discover which optional features to integrate:
+
+1. **Review the ### Features section** in the documentation below to understand all optional features Raindrop supports (e.g., Attachments, Identifying Users, Tracking Signals, Tracing, etc.)
+
+2. **Detect existing feature usage** in the project:
+   - Search for existing user feedback mechanisms (thumbs up/down, ratings) → relevant to Signals
+   - Search for user identification/auth patterns → relevant to Identifying Users
+   - Search for file/image handling in LLM calls → relevant to Attachments
+   - Search for existing tracing/observability setup → relevant to Tracing
+
+3. **Call AskUserQuestion** to confirm which detected features to integrate:
+   - Only ask about features you actually detected in the project
+   - Phrase it as: "I found (some) features in your project. Which features would you like to integrate with Raindrop?"
+   - The recommended option should be all of them.
+
+4. **Then call EnterPlanMode** to create a plan based on their answers`;
+  }
+
+  // Default for other frameworks (e.g., Vercel AI SDK)
+  return `## First Action
+
+Your first action MUST be to call the EnterPlanMode tool. This will allow you to:
+- Explore the codebase to understand the project structure and LLM API usage
+- Use AskUserQuestion to clarify details (e.g., which features to integrate)
+- Create a plan before making any changes`;
+}
+
+/**
  * Build the integration prompt for the agent.
  * Uses shared base prompt with optional framework-specific documentation.
  */
@@ -77,6 +111,7 @@ export async function buildIntegrationPrompt(
   context: {
     frameworkVersion: string;
     otelProvider?: string;
+    sessionId: string;
   },
 ): Promise<string> {
   let documentation = '';
@@ -87,6 +122,11 @@ export async function buildIntegrationPrompt(
       logToFile('Error loading documentation:', error);
       // Continue without documentation if loading fails
     }
+  }
+
+  // Replace wizardSession placeholder with the actual session ID
+  if (documentation) {
+    documentation = documentation.replace(/__WIZARD_SESSION_UUID__/g, context.sessionId);
   }
 
   const otelProviderInfo = context.otelProvider
@@ -139,17 +179,10 @@ Follow ${frameworkName} best practices. Focus on files where LLM API calls are m
 
 ## Completion
 
-CRITICAL: After completing all steps, call the CompleteIntegration tool with an empty object \`{}\`.
-
 Only call CompleteIntegration after you have:
 1. Installed the Raindrop package
 2. Integrated at all LLM API call sites
 3. Verified the build succeeds
 
-## First Action
-
-Your first action MUST be to call the EnterPlanMode tool. This will allow you to:
-- Explore the codebase to understand the project structure and LLM API usage
-- Use AskUserQuestions to clarify details (e.g., which features to integrate)
-- Create a plan before making any changes`;
+${formatFirstActionInstructions(frameworkName)}`;
 }

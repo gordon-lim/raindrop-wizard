@@ -10,12 +10,12 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { PendingItem } from '../contexts/WizardContext.js';
 import { SelectPrompt } from './SelectPrompt.js';
-import { TextPrompt } from './TextPrompt.js';
 import { SpinnerDisplay } from './SpinnerDisplay.js';
 import { PersistentTextInput } from './PersistentTextInput.js';
 import { ToolApprovalPrompt } from './ToolApprovalPrompt.js';
 import { ClarifyingQuestionsPrompt } from './ClarifyingQuestionsPrompt.js';
 import { PlanApprovalPrompt } from './PlanApprovalPrompt.js';
+import { FeedbackSelectPrompt } from './FeedbackSelectPrompt.js';
 import type {
   SelectOptions,
   TextOptions,
@@ -23,6 +23,7 @@ import type {
   ToolApprovalProps,
   ClarifyingQuestionsProps,
   PlanApprovalProps,
+  FeedbackSelectOptions,
 } from '../types.js';
 
 interface PendingPromptProps {
@@ -38,8 +39,17 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
     case 'select':
       return <SelectPrompt options={item.props as SelectOptions<unknown>} />;
 
-    case 'text':
-      return <TextPrompt options={item.props as TextOptions} />;
+    case 'text': {
+      // Use PersistentTextInput for text prompts (spinner is managed separately)
+      const textOptions = item.props as TextOptions;
+      const persistentProps: PersistentInputProps = {
+        message: textOptions.message,
+        placeholder: textOptions.placeholder,
+        defaultValue: textOptions.defaultValue || textOptions.initialValue,
+        validate: textOptions.validate,
+      };
+      return <PersistentTextInput props={persistentProps} />;
+    }
 
     case 'spinner':
       return <SpinnerDisplay message={(item.props as { message: string }).message} />;
@@ -55,6 +65,9 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
 
     case 'plan-approval':
       return <PlanApprovalPrompt props={item.props as PlanApprovalProps} />;
+
+    case 'feedback-select':
+      return <FeedbackSelectPrompt options={item.props as FeedbackSelectOptions<unknown>} />;
 
     default:
       return (

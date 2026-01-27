@@ -7,6 +7,25 @@ import ui from '../utils/ui.js';
 import type { ToolApprovalResult, AgentQueryHandle } from '../ui/types.js';
 import { logToFile } from '../utils/debug.js';
 import { createTwoFilesPatch } from 'diff';
+import { SAFE_BASH_PATTERNS } from './constants.js';
+
+// ============================================================================
+// Approved Plan Storage
+// ============================================================================
+
+/**
+ * Module-level storage for the approved plan content.
+ * Set when user approves a plan via ExitPlanMode tool.
+ */
+let approvedPlanContent: string | null = null;
+
+/**
+ * Get the approved plan content (if any).
+ * Returns null if no plan has been approved.
+ */
+export function getApprovedPlan(): string | null {
+  return approvedPlanContent;
+}
 
 // ============================================================================
 // Pending Tool Call Types
@@ -37,7 +56,7 @@ export interface AgentQueryHandleDeps {
 
 /**
  * Create an AgentQueryHandle for external control of the agent.
- * Handles interrupts by marking pending tool calls and stopping UI.
+ * Handles interrupts by marking pending tool calls (keeps persistent input running).
  */
 export function createAgentQueryHandle(deps: AgentQueryHandleDeps): AgentQueryHandle {
   const { isInterruptingRef, waitingForUserInputRef, pendingToolCalls, getQueryObject } = deps;
@@ -71,8 +90,8 @@ export function createAgentQueryHandle(deps: AgentQueryHandleDeps): AgentQueryHa
         });
       }
 
-      // Stop the persistent input (removes the spinner)
-      ui.stopPersistentInput();
+      // Note: Don't stop persistent input here - keep it visible for user to type their message
+      // The spinner will be stopped separately, and the input remains for user to submit
 
       // Call SDK interrupt
       const queryObject = getQueryObject();
@@ -226,6 +245,9 @@ async function handlePlanApproval(
     logToFile('Plan approval result:', result);
 
     if (result.approved) {
+      // Store the approved plan for later use (e.g., Slack notification at end of wizard)
+      approvedPlanContent = planContent;
+
       // User approved the plan - allow the tool
       return {
         behavior: 'allow',
@@ -256,9 +278,29 @@ const AUTO_APPROVED_TOOLS = new Set([
 ]);
 
 /**
+ * Check if a bash command matches a safe pattern and can be auto-approved.
+ */
+function isSafeBashCommand(command: string): boolean {
+  const trimmed = command.trim();
+  return SAFE_BASH_PATTERNS.some(pattern => {
+    if (pattern.startsWith('*')) {
+      // Suffix match (e.g., '*--version')
+      return trimmed.endsWith(pattern.slice(1));
+    } else if (pattern.endsWith('*')) {
+      // Prefix match (e.g., 'npm install*')
+      return trimmed.startsWith(pattern.slice(0, -1));
+    } else {
+      // Exact match
+      return trimmed === pattern;
+    }
+  });
+}
+
+/**
  * Create a canUseTool handler that integrates with the UI for approvals.
  * - Handles AskUserQuestion by showing clarifying questions UI
  * - Handles ExitPlanMode by showing plan approval UI
+ * - Handles WebSearch by restricting to allowed domains
  * - Shows approval UI for other tools
  */
 export function createCanUseToolHandler() {
@@ -273,6 +315,28 @@ export function createCanUseToolHandler() {
       return {
         behavior: 'allow',
         updatedInput: inputRecord,
+      };
+    }
+
+    // Auto-approve safe bash commands
+    if (toolName === 'Bash' && typeof inputRecord.command === 'string') {
+      if (isSafeBashCommand(inputRecord.command)) {
+        logToFile('Auto-approving safe bash command:', inputRecord.command);
+        return {
+          behavior: 'allow',
+          updatedInput: inputRecord,
+        };
+      }
+    }
+
+    // Handle WebSearch by adding allowed domains restriction
+    if (toolName === 'WebSearch') {
+      return {
+        behavior: 'allow',
+        updatedInput: {
+          ...inputRecord,
+          allowed_domains: ['raindrop.ai/docs', 'ai-sdk.dev/docs/'],
+        },
       };
     }
 

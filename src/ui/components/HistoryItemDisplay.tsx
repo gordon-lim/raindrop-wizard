@@ -145,7 +145,7 @@ export function HistoryItemDisplay({
       return (
         <Box>
           <Text color="magenta">◆ </Text>
-          <Markdown>{item.text}</Markdown>
+          <Markdown showSectionPrefix={false}>{item.text}</Markdown>
         </Box>
       );
 
@@ -205,7 +205,7 @@ export function HistoryItemDisplay({
           </Box>
           {item.planContent && (
             <Box marginLeft={2} marginTop={1} flexDirection="column">
-              <Markdown>{item.planContent}</Markdown>
+              <Markdown showSectionPrefix={false}>{item.planContent}</Markdown>
             </Box>
           )}
         </Box>

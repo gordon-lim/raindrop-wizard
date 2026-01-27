@@ -1,16 +1,19 @@
 /**
- * Persistent text input component for agent execution.
- * Shown during agent execution when no approval prompt is active.
- * Allows users to send follow-up messages or interrupt the agent.
- * Includes a spinner to show the agent is working.
- * TODO: Unify with TextPrompt component
+ * Unified text input component for the wizard.
+ * 
+ * Two modes:
+ * 1. Callback mode: Uses onSubmit/onInterrupt callbacks (for persistent input during agent execution)
+ * 2. Context mode: Uses resolvePending from WizardContext (for standalone text prompts)
+ * 
+ * Note: Spinner is managed separately via ui.spinner() - this component is just the input.
  */
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import InkSpinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import { PromptContainer } from './PromptContainer.js';
+import { useWizardActions } from '../contexts/WizardContext.js';
+import { CANCEL_SYMBOL } from '../cancellation.js';
 import type { PersistentInputProps } from '../types.js';
 
 interface PersistentTextInputComponentProps {
@@ -18,61 +21,93 @@ interface PersistentTextInputComponentProps {
 }
 
 /**
- * Persistent text input that remains visible during agent execution.
- * - Shows spinner indicating agent is working
- * - Submit messages with Enter
- * - Interrupt agent with Escape or Ctrl+C
+ * Unified text input component.
+ * - With callbacks (onSubmit/onInterrupt): Uses callbacks for submit/interrupt
+ * - Without callbacks: Uses resolvePending from context (text prompt mode)
  */
 export function PersistentTextInput({
   props,
 }: PersistentTextInputComponentProps): React.ReactElement {
-  const { onSubmit, onInterrupt, placeholder, spinnerMessage } = props;
-  const [value, setValue] = useState('');
-  const [lastKey, setLastKey] = useState('');
+  const {
+    placeholder,
+    message,
+    defaultValue,
+    validate,
+    onSubmit,
+    onInterrupt,
+  } = props;
 
-  // Handle Escape and Ctrl+C for interruption
-  // Note: Escape key sends '\x1b' (ASCII 27) in some terminals
+  const { resolvePending, addItem } = useWizardActions();
+  const [value, setValue] = useState(defaultValue || '');
+  const [error, setError] = useState<string | null>(null);
+
+  // Handle Escape and Ctrl+C
   useInput((input, key) => {
-    // Debug: track last key for visibility
-    setLastKey(key.escape ? 'ESC' : key.ctrl ? `Ctrl+${input}` : input || '?');
-    
     if (key.escape || input === '\x1b' || (key.ctrl && input === 'c')) {
-      onInterrupt();
+      if (onInterrupt) {
+        // Has interrupt callback - use it
+        onInterrupt();
+      } else {
+        // No callback - cancel via resolvePending (text prompt mode)
+        addItem({
+          type: 'text-result',
+          text: message || '',
+          label: '(cancelled)',
+        });
+        resolvePending(CANCEL_SYMBOL);
+      }
     }
   });
 
   // Handle submission
   const handleSubmit = (submittedValue: string) => {
-    if (submittedValue.trim()) {
-      onSubmit(submittedValue.trim());
-      setValue('');
+    // Validate if validator provided
+    if (validate) {
+      const validationError = validate(submittedValue);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+
+    if (onSubmit) {
+      // Has submit callback - use it
+      if (submittedValue.trim()) {
+        onSubmit(submittedValue.trim());
+        setValue('');
+      }
+    } else {
+      // No callback - resolve via context (text prompt mode)
+      resolvePending(submittedValue);
     }
   };
 
   return (
-    <Box flexDirection="column">
-      {/* Spinner above the container */}
-      <Box marginBottom={1}>
-        <Text color="cyan">
-          <InkSpinner type="dots" />
-        </Text>
-        <Text> {spinnerMessage || 'Agent is working...'}</Text>
-        {lastKey && <Text dimColor> [key: {lastKey}]</Text>}
+    <PromptContainer>
+      {/* Message */}
+      {message && <Text>{message}</Text>}
+
+      {/* Text input */}
+      <Box marginTop={message ? 1 : 0}>
+        <Text color="cyan">› </Text>
+        <TextInput
+          value={value}
+          onChange={(newValue) => {
+            setValue(newValue);
+            if (error) setError(null);
+          }}
+          placeholder={placeholder || 'Type a message or Esc to interrupt...'}
+          onSubmit={handleSubmit}
+        />
       </Box>
 
-      <PromptContainer>
-        {/* Text input */}
-        <Box>
-          <Text color="cyan">› </Text>
-          <TextInput
-            value={value}
-            onChange={setValue}
-            placeholder={placeholder || 'Type a message or Esc to interrupt...'}
-            onSubmit={handleSubmit}
-          />
+      {/* Validation error */}
+      {error && (
+        <Box marginTop={1}>
+          <Text color="red">{error}</Text>
         </Box>
-      </PromptContainer>
-    </Box>
+      )}
+    </PromptContainer>
   );
 }
 

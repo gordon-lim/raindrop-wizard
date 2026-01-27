@@ -29,8 +29,18 @@ bun add raindrop-ai
 import { Raindrop } from "raindrop-ai";
 
 // Replace with the key from your Raindrop dashboard
-const raindrop = new Raindrop({ writeKey: RAINDROP_API_KEY });
+const raindrop = new Raindrop({ writeKey: RAINDROP_API_KEY },
+                                wizardSession='__WIZARD_SESSION_UUID__' // Required
+);
 ```
+
+### **Features**
+
+- [Attachments](#attachments) - Include rich context (code, text, images, iframes) with events
+- [Identifying Users](#identifying-users) - Associate traits and properties with users
+- [Tracking Signals](#tracking-signals-feedback) - Attach user feedback (thumbs up/down, comments, edits) to events
+- [PII Redaction](#pii-redaction) - Client-side PII redaction for privacy
+- [AI Tracing (Beta)](#ai-tracing-beta) - Trace tool calls, tasks, and workflows with spans
 
 ---
 

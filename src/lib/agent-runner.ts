@@ -19,9 +19,9 @@ import Chalk from 'chalk';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
-import { askForWizardLogin } from '../utils/clack-utils.js';
+import { askForWizardLogin, validateProjectAccess } from '../utils/clack-utils.js';
 import { getUserApiKey } from '../utils/oauth.js';
-import { Integration } from './constants.js';
+import { Integration, ANTHROPIC_BASE_URL } from './constants.js';
 import { buildIntegrationPrompt } from './agent-prompts.js';
 import { testIntegration } from './test-server.js';
 
@@ -70,17 +70,26 @@ export async function runAgentWizard(
 
   const token = await askForWizardLogin({ signup: false });
 
+  process.env.ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_AUTH_TOKEN = token.access_token;
+
+  const apiKeySpinner = ui.spinner();
+  apiKeySpinner.start('Retrieving your Raindrop API key...');
+
+  await validateProjectAccess(token.access_token);
+
   const apiKey = await getUserApiKey(token.access_token);
 
   await writeApiKeyToEnv(apiKey, options.installDir);
 
-  ui.addItem({ type: 'success', text: 'I retrieved your API key and saved it to .env' });
+  apiKeySpinner.stop('I retrieved your API key and saved it to .env');
 
   const frameworkVersion = config.detection.getVersion(packageJson);
 
   // Build integration prompt
   const integrationPrompt = await buildIntegrationPrompt(config, {
     frameworkVersion: frameworkVersion || 'latest',
+    sessionId: options.sessionId,
   });
 
   if (options.debug) {
@@ -114,11 +123,6 @@ export async function runAgentWizard(
         resume,
       },
     );
-
-    // Skip testing for vercelAiSdk (not yet implemented)
-    if (config.metadata.integration === Integration.vercelAiSdk) {
-      break;
-    }
 
     const result = await testIntegration(options, token.access_token);
 

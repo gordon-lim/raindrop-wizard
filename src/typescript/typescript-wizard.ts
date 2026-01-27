@@ -3,7 +3,7 @@ import type { FrameworkConfig } from '../lib/framework-config.js';
 import type { PackageJson } from '../utils/package-json-types.js';
 import { enableDebugLogs } from '../utils/debug.js';
 import { runAgentWizard } from '../lib/agent-runner.js';
-import { Integration, TEST_URL } from '../lib/constants.js';
+import { Integration } from '../lib/constants.js';
 import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
@@ -76,10 +76,7 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
           __dirname,
           `../../../src/typescript/otel-${otelProvider}.md`,
         );
-        let otelDocs = await fs.promises.readFile(otelDocsPath, 'utf-8');
-
-        // Template replacement for otel docs
-        otelDocs = otelDocs.replace(/\{\{TEST_URL\}\}/g, TEST_URL);
+        const otelDocs = await fs.promises.readFile(otelDocsPath, 'utf-8');
 
         return `${baseDocs}\n\n${otelDocs}`;
       } catch (error) {

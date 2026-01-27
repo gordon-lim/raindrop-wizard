@@ -123,15 +123,52 @@ export interface PlanApprovalResult {
 // ============================================================================
 
 /**
- * Props for persistent text input during agent execution
+ * Props for unified text input component.
+ * Handles both callback mode (during agent execution) and context mode (standalone prompts).
+ * Note: Spinner is managed separately via ui.spinner().
  */
 export interface PersistentInputProps {
-  onSubmit: (message: string) => void | Promise<void>;
-  onInterrupt: () => void;
   placeholder?: string;
-  /** Message to show in the spinner while agent is working */
-  spinnerMessage?: string;
+  /** Message to show above the input */
+  message?: string;
+  /** Default value for the input */
+  defaultValue?: string;
+  /** Validation function - return error message or void */
+  validate?: (value: string) => string | void;
+  /** Callback when user submits - if not provided, uses resolvePending from context */
+  onSubmit?: (message: string) => void | Promise<void>;
+  /** Callback when user interrupts (Esc/Ctrl+C) - if not provided, uses resolvePending from context */
+  onInterrupt?: () => void;
 }
+
+// ============================================================================
+// Feedback Select Types (Select with inline text input option)
+// ============================================================================
+
+/**
+ * An option in a feedback select prompt
+ */
+export interface FeedbackSelectOption<T> {
+  value: T;
+  label: string;
+  /** If true, selecting this option enables inline text input */
+  allowTextInput?: boolean;
+}
+
+/**
+ * Props for feedback select prompts
+ */
+export interface FeedbackSelectOptions<T> {
+  message: string;
+  options: Array<FeedbackSelectOption<T>>;
+}
+
+/**
+ * Result from feedback select - either an option was selected or text was entered
+ */
+export type FeedbackSelectResult<T> =
+  | { type: 'option'; value: T }
+  | { type: 'text'; value: string };
 
 // ============================================================================
 // Tool Call Display Types

@@ -26,6 +26,8 @@ import type {
   ClarifyingQuestionsResult,
   PlanApprovalProps,
   PlanApprovalResult,
+  FeedbackSelectOptions,
+  FeedbackSelectResult,
 } from '../ui/types.js';
 import type { HistoryItemInput, AgentState } from '../ui/contexts/WizardContext.js';
 
@@ -41,6 +43,8 @@ export type {
   ClarifyingQuestionsResult,
   PlanApprovalProps,
   PlanApprovalResult,
+  FeedbackSelectOptions,
+  FeedbackSelectResult,
   AgentState,
 };
 export { isCancel, CANCEL_SYMBOL };
@@ -155,13 +159,25 @@ export async function planApproval(
 }
 
 /**
+ * Show feedback select prompt (select with inline text input option).
+ * Used for "yes/no with feedback" patterns.
+ */
+export async function feedbackSelect<T>(
+  options: FeedbackSelectOptions<T>,
+): Promise<FeedbackSelectResult<T>> {
+  return getActions().feedbackSelect(options);
+}
+
+/**
  * Start persistent input mode during agent execution.
  * Sets pendingItem to persistent-input type.
+ * Note: Spinner is managed separately via ui.spinner().
  */
 export function startPersistentInput(config: {
   onSubmit: (message: string) => void;
   onInterrupt: () => void;
-  spinnerMessage?: string;
+  message?: string;
+  placeholder?: string;
 }): void {
   getActions().startPersistentInput(config);
 }
@@ -195,6 +211,7 @@ const ui = {
   toolApproval,
   clarifyingQuestions,
   planApproval,
+  feedbackSelect,
   startPersistentInput,
   stopPersistentInput,
   setAgentState,
