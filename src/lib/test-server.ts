@@ -51,12 +51,10 @@ export interface ReceivedEvent {
  */
 async function fetchEvents(accessToken: string, wizardSessionId: string): Promise<ApiEvent[]> {
   try {
-    const url = new URL(EVENTS_LIST_ENDPOINT);
-    url.searchParams.set('wizardSession', wizardSessionId);
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch(EVENTS_LIST_ENDPOINT, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'x-wizard-session': wizardSessionId,
       },
     });
     if (!response.ok) {
@@ -89,12 +87,12 @@ export async function testIntegration(
   const testSpinner = ui.spinner();
   testSpinner.start(
     chalk.cyan('Test your integration: ') +
-    chalk.dim('Interact with your AI. Events will appear below. ') +
+    chalk.dim('Interact with your AI. Events will appear above. ') +
     chalk.yellow('Press any key when done testing...'),
   );
 
   // Start polling in the background
-  const pollPromise = (async () => {
+  void (async () => {
     while (isPolling) {
       const events = await fetchEvents(accessToken, options.sessionId);
 

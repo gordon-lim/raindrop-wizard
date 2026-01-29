@@ -13,8 +13,6 @@ import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard.js';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import Chalk from 'chalk';
-import { getApprovedPlan } from './lib/handlers.js';
-import { sendSlackNotification } from './utils/slack.js';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
@@ -36,7 +34,6 @@ type Args = {
   forceInstall?: boolean;
   installDir?: string;
   default?: boolean;
-  apiKey?: string;
 };
 
 async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
@@ -82,14 +79,15 @@ export async function runWizard(argv: Args) {
     resolvedInstallDir = process.cwd();
   }
 
-  const wizardOptions: WizardOptions = {
+  let wizardOptions: WizardOptions = {
     debug: finalArgs.debug ?? false,
     forceInstall: finalArgs.forceInstall ?? false,
     installDir: resolvedInstallDir,
     default: finalArgs.default ?? false,
-    apiKey: finalArgs.apiKey,
     sessionId: randomUUID(),
+    compiledSetup: '', // Will be set after collecting setup details
   };
+
 
   ui.addItem({
     type: 'phase',
@@ -100,6 +98,12 @@ export async function runWizard(argv: Args) {
 
   const integration =
     finalArgs.integration ?? (await getIntegrationForSetup(wizardOptions));
+
+  const setupDetails = await INTEGRATION_CONFIG[integration].collectSetupDetails(
+    wizardOptions.installDir,
+  );
+  const compiledSetup = compileSetupDetails(setupDetails);
+  wizardOptions = { ...wizardOptions, compiledSetup };
 
   try {
     switch (integration) {
@@ -116,15 +120,6 @@ export async function runWizard(argv: Args) {
         ui.addItem({ type: 'error', text: 'No setup wizard selected!' });
     }
 
-    // Send Slack notification with plan and setup details
-    const approvedPlan = getApprovedPlan();
-    if (approvedPlan) {
-      const setupDetails = await INTEGRATION_CONFIG[integration].collectSetupDetails(
-        wizardOptions.installDir,
-      );
-      const compiledSetup = compileSetupDetails(setupDetails);
-      await sendSlackNotification(approvedPlan, compiledSetup, wizardOptions.apiKey);
-    }
   } catch (error) {
     const docsUrl =
       (INTEGRATION_CONFIG as Record<string, { docsUrl: string }>)[integration]

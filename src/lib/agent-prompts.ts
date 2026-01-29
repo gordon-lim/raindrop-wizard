@@ -69,6 +69,60 @@ function formatOtelProviderInfo(otelProvider: string): string {
 }
 
 /**
+ * Plan schema template for structured integration plans
+ */
+export const PLAN_SCHEMA_TEMPLATE = `
+## Plan Format
+
+When creating a plan, use this structure. The goal is a high-level overview the user can quickly glance at to confirm: "yes, this looks right." Keep it short and scannable—not a detailed spec.
+
+---
+
+### Project Overview
+
+**Description:** [1-2 sentences about what this project does and its tech stack]
+
+**Package Manager:** [npm/yarn/pnpm/poetry/pip]
+
+---
+
+### AI Integration Points
+
+Files where LLM/AI logic lives:
+
+| File | Purpose | SDK Used |
+|------|---------|----------|
+| \`path/to/file.ts\` | [What this file does with AI] | [openai/anthropic/etc] |
+
+---
+
+### Integration Plan
+
+#### 1. Install Raindrop SDK
+- [ ] Install \`@raindrop/sdk\` using [package manager]
+- [ ] Add RAINDROP_WRITE_KEY to .env
+
+#### 2. Core Integration
+- [ ] [Specific file]: Wrap LLM client initialization
+- [ ] [Specific file]: Add tracing to API calls
+
+#### 3. Feature: [Feature Name]
+**What it does:** [Brief explanation of this Raindrop feature]
+**Where to add it:** \`path/to/file.ts\`
+**Implementation:**
+- [ ] [Step 1]
+- [ ] [Step 2]
+
+[Repeat Section 3 for each feature]
+
+#### 4. Verify Build
+- [ ] Run build command
+- [ ] Fix any type errors
+
+---
+`;
+
+/**
  * Format first action instructions for the agent based on framework
  */
 function formatFirstActionInstructions(frameworkName: string): string {
@@ -169,13 +223,15 @@ ${sdkDescription}
 2. **Integrate at LLM API call sites**
    - Find files with LLM client initialization or API calls
    - Use an existing user ID from auth/session, or generate one with UUID if unavailable
-   - Read RAINDROP_WRITE_KEY from .env at project root
+   - Use RAINDROP_WRITE_KEY from environment variables (already loaded - DO NOT read .env file directly)
 
 3. **Verify the build**
    - Run the build/type-check command and fix any errors
    - Repeat until the project builds successfully
 
 Follow ${frameworkName} best practices. Focus on files where LLM API calls are made.${docsSection}
+
+
 
 ## Completion
 
@@ -184,5 +240,7 @@ Only call CompleteIntegration after you have:
 2. Integrated at all LLM API call sites
 3. Verified the build succeeds
 
-${formatFirstActionInstructions(frameworkName)}`;
+${formatFirstActionInstructions(frameworkName)}
+
+${PLAN_SCHEMA_TEMPLATE}`;
 }

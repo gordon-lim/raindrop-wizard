@@ -8,7 +8,7 @@ import { createRequire } from 'module';
 import ui from '../utils/ui.js';
 import type { AgentQueryHandle } from '../ui/types.js';
 import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug.js';
-import { createCanUseToolHandler, createAgentQueryHandle, type PendingToolCall } from './handlers.js';
+import { createCanUseToolHandler, createAgentQueryHandle, type PendingToolCall, type SessionInfo } from './handlers.js';
 import { processSDKMessage } from './sdk-messages.js';
 import { createCompletionMcpServer } from './mcp.js';
 import type { WizardOptions } from '../utils/types.js';
@@ -69,18 +69,6 @@ export function initializeAgent(
   logToFile('Install directory:', options.installDir);
 
   try {
-    // ANTHROPIC_API_KEY is required
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error(
-        'ANTHROPIC_API_KEY environment variable is required. Please set it before running the wizard.',
-      );
-    }
-
-    // Use direct Claude API key (standard SDK authentication)
-    logToFile(
-      'Using direct Claude API key from ANTHROPIC_API_KEY environment variable',
-    );
-    // SDK will use ANTHROPIC_API_KEY automatically - no need to set ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN
     process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = 'true';
 
     // MCP servers not used - pass empty config for SDK compatibility
@@ -94,13 +82,11 @@ export function initializeAgent(
 
     logToFile('Agent config:', {
       workingDirectory: agentRunConfig.workingDirectory,
-      apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
     });
 
     if (options.debug) {
       debug('Agent config:', {
         workingDirectory: agentRunConfig.workingDirectory,
-        apiKeyPresent: !!process.env.ANTHROPIC_API_KEY,
       });
     }
 
@@ -121,6 +107,7 @@ export interface RunAgentConfig {
   spinnerMessage?: string;
   successMessage?: string;
   resume?: string;
+  accessToken: string;
 }
 
 /**
@@ -140,7 +127,8 @@ export async function runAgentLoop(
     spinnerMessage = 'Customizing your  setup...',
     successMessage = 'Raindrop integration complete',
     resume,
-  } = config ?? {};
+    accessToken,
+  } = config ?? {} as RunAgentConfig;
 
 
   // Add header to indicate start of interactive agent phase
@@ -223,6 +211,12 @@ export async function runAgentLoop(
       onInterrupt: handlePersistentInterrupt,
     });
 
+    // Session info for notifications
+    const sessionInfo: SessionInfo = {
+      sessionId: options.sessionId,
+      accessToken,
+    };
+
     queryObject = query({
       prompt: currentPrompt,
       options: {
@@ -232,9 +226,10 @@ export async function runAgentLoop(
         mcpServers: {
           'raindrop-wizard': completionMcpServer,
         },
+        systemPrompt: "{WIZARD_SYSTEM_PROMPT}",
         env: { ...process.env },
         resume: currentSessionId,
-        canUseTool: createCanUseToolHandler(),
+        canUseTool: createCanUseToolHandler(sessionInfo),
         stderr: (data: string) => {
           logToFile('CLI stderr:', data);
           if (options.debug) {

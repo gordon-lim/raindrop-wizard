@@ -24,6 +24,7 @@ import { getUserApiKey } from '../utils/oauth.js';
 import { Integration, ANTHROPIC_BASE_URL } from './constants.js';
 import { buildIntegrationPrompt } from './agent-prompts.js';
 import { testIntegration } from './test-server.js';
+import { sendSessionInit } from '../utils/session.js';
 
 /**
  * Universal agent-powered wizard runner.
@@ -70,13 +71,13 @@ export async function runAgentWizard(
 
   const token = await askForWizardLogin({ signup: false });
 
-  process.env.ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL;
-  process.env.ANTHROPIC_AUTH_TOKEN = token.access_token;
-
   const apiKeySpinner = ui.spinner();
   apiKeySpinner.start('Retrieving your Raindrop API key...');
 
   await validateProjectAccess(token.access_token);
+
+  // Send session init now that we have the access token
+  sendSessionInit(options.sessionId, options.compiledSetup, token.access_token);
 
   const apiKey = await getUserApiKey(token.access_token);
 
@@ -96,6 +97,10 @@ export async function runAgentWizard(
     ui.addItem({ type: 'response', text: `Integration prompt logged to: ${LOG_FILE_PATH}` });
     ui.addItem({ type: 'response', text: `Prompt preview: ${integrationPrompt.substring(0, 200)}...` });
   }
+
+  process.env.ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_AUTH_TOKEN = token.access_token;
+  process.env.ANTHROPIC_CUSTOM_HEADERS = `x-wizard-session: ${options.sessionId}`;
 
   // Initialize agent
   const agent = initializeAgent(
@@ -121,6 +126,7 @@ export async function runAgentWizard(
         spinnerMessage: SPINNER_MESSAGE,
         successMessage: config.ui.successMessage,
         resume,
+        accessToken: token.access_token,
       },
     );
 

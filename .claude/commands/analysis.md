@@ -1,1 +1,0 @@
-Review the most recent contents of /tmp/raindrop-ai-wizard.log. Look for 

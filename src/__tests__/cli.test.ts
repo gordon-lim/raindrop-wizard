@@ -17,7 +17,6 @@ describe('CLI argument parsing', () => {
     process.env = { ...originalEnv };
     delete process.env.RAINDROP_DEBUG;
     delete process.env.RAINDROP_DEFAULT;
-    delete process.env.RAINDROP_WRITE_KEY;
     delete process.env.RAINDROP_INSTALL_DIR;
 
     // Mock process.exit to prevent test runner from exiting
@@ -124,15 +123,6 @@ describe('CLI argument parsing', () => {
       expect(args.debug).toBe(true);
       expect(args.default).toBe(true);
     });
-
-    test('respects RAINDROP_WRITE_KEY', async () => {
-      process.env.RAINDROP_WRITE_KEY = 'phx_test_key';
-
-      await runCLI([]);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.apiKey).toBe('phx_test_key');
-    });
   });
 
   describe('all flags', () => {
@@ -145,8 +135,6 @@ describe('CLI argument parsing', () => {
         '/custom/path',
         '--integration',
         'typescript',
-        '--api-key',
-        'phx_test_key',
       ]);
 
       const args = getLastCallArgs(mockRunWizard);
@@ -156,25 +144,6 @@ describe('CLI argument parsing', () => {
       expect(args['force-install']).toBe(true);
       expect(args['install-dir']).toBe('/custom/path');
       expect(args.integration).toBe('typescript');
-      expect(args.apiKey).toBe('phx_test_key');
-    });
-  });
-
-  describe('--api-key flag', () => {
-    test('can be passed via CLI', async () => {
-      await runCLI(['--api-key', 'phx_test_key']);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.apiKey).toBe('phx_test_key');
-    });
-
-    test('CLI args override environment variables', async () => {
-      process.env.RAINDROP_WRITE_KEY = 'phx_env_key';
-
-      await runCLI(['--api-key', 'phx_cli_key']);
-
-      const args = getLastCallArgs(mockRunWizard);
-      expect(args.apiKey).toBe('phx_cli_key');
     });
   });
 });

@@ -35,11 +35,6 @@ yargs(hideBin(process.argv))
       describe: 'Use default options for all prompts\nenv: RAINDROP_DEFAULT',
       type: 'boolean',
     },
-    'api-key': {
-      describe:
-        'Raindrop personal API key (phx_xxx) for authentication\nenv: RAINDROP_WRITE_KEY',
-      type: 'string',
-    },
   })
   .command(
     ['$0'],
@@ -66,11 +61,6 @@ yargs(hideBin(process.argv))
     },
     async (argv) => {
       const options = { ...argv };
-
-      // Handle RAINDROP_WRITE_KEY env var (yargs expects RAINDROP_API_KEY)
-      if (!options.apiKey && process.env.RAINDROP_WRITE_KEY) {
-        options.apiKey = process.env.RAINDROP_WRITE_KEY;
-      }
 
       // TTY check - must use console before Ink is initialized
       if (isNonInteractiveEnvironment()) {

@@ -35,7 +35,8 @@ export const API_BASE_URL = 'http://localhost:3000';
 export const API_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;
 export const EVENTS_LIST_ENDPOINT = `${API_BASE_URL}/api/cli/events/list`;
 export const ANTHROPIC_BASE_URL = `${API_BASE_URL}/api/cli`;
-export const SLACK_ENDPOINT = `${API_BASE_URL}/api/cli/slack`;
+export const SESSION_START_ENDPOINT = `${API_BASE_URL}/api/cli/session/init`;
+export const SESSION_UPDATE_ENDPOINT = `${API_BASE_URL}/api/cli/session/update`;
 
 /**
  * Safe bash command patterns that can be auto-approved without user confirmation.

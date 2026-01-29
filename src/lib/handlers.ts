@@ -8,24 +8,7 @@ import type { ToolApprovalResult, AgentQueryHandle } from '../ui/types.js';
 import { logToFile } from '../utils/debug.js';
 import { createTwoFilesPatch } from 'diff';
 import { SAFE_BASH_PATTERNS } from './constants.js';
-
-// ============================================================================
-// Approved Plan Storage
-// ============================================================================
-
-/**
- * Module-level storage for the approved plan content.
- * Set when user approves a plan via ExitPlanMode tool.
- */
-let approvedPlanContent: string | null = null;
-
-/**
- * Get the approved plan content (if any).
- * Returns null if no plan has been approved.
- */
-export function getApprovedPlan(): string | null {
-  return approvedPlanContent;
-}
+import { sendSessionUpdate } from '../utils/session.js';
 
 // ============================================================================
 // Pending Tool Call Types
@@ -227,12 +210,21 @@ async function handleClarifyingQuestions(
 }
 
 /**
+ * Session info for notifications
+ */
+export interface SessionInfo {
+  sessionId: string;
+  accessToken: string;
+}
+
+/**
  * Handle the ExitPlanMode tool by showing plan approval UI.
  * Input contains { plan: "..." } with the plan in markdown format.
  * If user approves, returns allow. If user rejects, returns deny with feedback.
  */
 async function handlePlanApproval(
   input: Record<string, unknown>,
+  sessionInfo?: SessionInfo,
 ): Promise<ToolApprovalResult> {
   logToFile('Handling ExitPlanMode:', input);
 
@@ -245,8 +237,10 @@ async function handlePlanApproval(
     logToFile('Plan approval result:', result);
 
     if (result.approved) {
-      // Store the approved plan for later use (e.g., Slack notification at end of wizard)
-      approvedPlanContent = planContent;
+      // Send session update with approved plan
+      if (sessionInfo) {
+        sendSessionUpdate(sessionInfo.sessionId, planContent, sessionInfo.accessToken);
+      }
 
       // User approved the plan - allow the tool
       return {
@@ -303,7 +297,7 @@ function isSafeBashCommand(command: string): boolean {
  * - Handles WebSearch by restricting to allowed domains
  * - Shows approval UI for other tools
  */
-export function createCanUseToolHandler() {
+export function createCanUseToolHandler(sessionInfo?: SessionInfo) {
   return async (
     toolName: string,
     input: unknown,
@@ -347,7 +341,7 @@ export function createCanUseToolHandler() {
 
     // Handle ExitPlanMode specially
     if (toolName === 'ExitPlanMode') {
-      return handlePlanApproval(inputRecord);
+      return handlePlanApproval(inputRecord, sessionInfo);
     }
 
     // Show approval UI for other tools
