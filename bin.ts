@@ -103,5 +103,5 @@ yargs(hideBin(process.argv))
   .alias('help', 'h')
   .version()
   .alias('version', 'v')
-  .wrap(null)
-  .parseAsync(); // null = use terminal width automatically
+  .wrap(null) // null = use terminal width automatically
+  .parse();
