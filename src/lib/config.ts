@@ -3,7 +3,6 @@ import { Integration } from './constants.js';
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
-import ui from '../utils/ui.js';
 import { execSync } from 'child_process';
 
 /**
@@ -24,11 +23,16 @@ type IntegrationConfig = {
  * Get installed Python packages based on detected package manager/environment.
  * Returns the command used and the output.
  */
-function getPythonPackages(installDir: string): { command: string; output: string } | null {
+function getPythonPackages(
+  installDir: string,
+): { command: string; output: string } | null {
   // Check for Poetry (poetry.lock)
   if (fs.existsSync(path.join(installDir, 'poetry.lock'))) {
     try {
-      const output = execSync('poetry show', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('poetry show', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'poetry show', output };
     } catch {
       // Poetry not available or failed
@@ -38,7 +42,10 @@ function getPythonPackages(installDir: string): { command: string; output: strin
   // Check for Pipenv (Pipfile.lock)
   if (fs.existsSync(path.join(installDir, 'Pipfile.lock'))) {
     try {
-      const output = execSync('pipenv run pip list', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('pipenv run pip list', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'pipenv run pip list', output };
     } catch {
       // Pipenv not available or failed
@@ -48,7 +55,10 @@ function getPythonPackages(installDir: string): { command: string; output: strin
   // Check for uv (uv.lock)
   if (fs.existsSync(path.join(installDir, 'uv.lock'))) {
     try {
-      const output = execSync('uv pip list', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('uv pip list', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'uv pip list', output };
     } catch {
       // uv not available or failed
@@ -58,7 +68,10 @@ function getPythonPackages(installDir: string): { command: string; output: strin
   // Check for PDM (pdm.lock)
   if (fs.existsSync(path.join(installDir, 'pdm.lock'))) {
     try {
-      const output = execSync('pdm list', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('pdm list', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'pdm list', output };
     } catch {
       // PDM not available or failed
@@ -72,7 +85,10 @@ function getPythonPackages(installDir: string): { command: string; output: strin
     fs.existsSync(path.join(installDir, 'conda-lock.yml'))
   ) {
     try {
-      const output = execSync('conda list', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('conda list', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'conda list', output };
     } catch {
       // Conda not available or failed
@@ -94,14 +110,20 @@ function getPythonPackages(installDir: string): { command: string; output: strin
 
           if (fs.existsSync(unixPip)) {
             try {
-              const output = execSync(`"${unixPip}" list`, { encoding: 'utf-8', cwd: installDir }).trim();
+              const output = execSync(`"${unixPip}" list`, {
+                encoding: 'utf-8',
+                cwd: installDir,
+              }).trim();
               return { command: `${entry.name}/bin/pip list`, output };
             } catch {
               // Failed
             }
           } else if (fs.existsSync(winPip)) {
             try {
-              const output = execSync(`"${winPip}" list`, { encoding: 'utf-8', cwd: installDir }).trim();
+              const output = execSync(`"${winPip}" list`, {
+                encoding: 'utf-8',
+                cwd: installDir,
+              }).trim();
               return { command: `${entry.name}/Scripts/pip list`, output };
             } catch {
               // Failed
@@ -116,11 +138,17 @@ function getPythonPackages(installDir: string): { command: string; output: strin
 
   // Fallback to system pip/pip3
   try {
-    const output = execSync('pip list', { encoding: 'utf-8', cwd: installDir }).trim();
+    const output = execSync('pip list', {
+      encoding: 'utf-8',
+      cwd: installDir,
+    }).trim();
     return { command: 'pip list', output };
   } catch {
     try {
-      const output = execSync('pip3 list', { encoding: 'utf-8', cwd: installDir }).trim();
+      const output = execSync('pip3 list', {
+        encoding: 'utf-8',
+        cwd: installDir,
+      }).trim();
       return { command: 'pip3 list', output };
     } catch {
       return null;
@@ -131,7 +159,9 @@ function getPythonPackages(installDir: string): { command: string; output: strin
 /**
  * Collect setup details for Python projects
  */
-async function collectPythonSetupDetails(installDir: string): Promise<SetupDetail[]> {
+async function collectPythonSetupDetails(
+  installDir: string,
+): Promise<SetupDetail[]> {
   const details: SetupDetail[] = [];
 
   // Collect installed packages using detected package manager
@@ -163,7 +193,9 @@ async function collectPythonSetupDetails(installDir: string): Promise<SetupDetai
 /**
  * Collect setup details for TypeScript/Node.js projects
  */
-async function collectTypeScriptSetupDetails(installDir: string): Promise<SetupDetail[]> {
+async function collectTypeScriptSetupDetails(
+  installDir: string,
+): Promise<SetupDetail[]> {
   const details: SetupDetail[] = [];
 
   // Collect package.json
@@ -175,7 +207,9 @@ async function collectTypeScriptSetupDetails(installDir: string): Promise<SetupD
 
   // Collect Node version
   try {
-    const nodeVersion = execSync('node --version', { encoding: 'utf-8' }).trim();
+    const nodeVersion = execSync('node --version', {
+      encoding: 'utf-8',
+    }).trim();
     details.push({ filename: 'node-version', content: nodeVersion });
   } catch {
     // Node version not available
@@ -185,10 +219,18 @@ async function collectTypeScriptSetupDetails(installDir: string): Promise<SetupD
   try {
     // First try to get from package.json devDependencies/dependencies
     if (fs.existsSync(packageJsonPath)) {
-      const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, 'utf-8'));
-      const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+      const packageJson = JSON.parse(
+        await fs.promises.readFile(packageJsonPath, 'utf-8'),
+      );
+      const deps = {
+        ...packageJson.dependencies,
+        ...packageJson.devDependencies,
+      };
       if (deps.typescript) {
-        details.push({ filename: 'typescript-version', content: deps.typescript });
+        details.push({
+          filename: 'typescript-version',
+          content: deps.typescript,
+        });
       }
     }
   } catch {
@@ -280,8 +322,9 @@ async function detectPythonProject(
       const filePath = path.join(options.installDir, file);
       const content = await fs.promises.readFile(filePath, 'utf-8');
 
-      if (PYTHON_AI_SDK_IMPORT_PATTERNS.some((pattern) => pattern.test(content))) {
-        ui.addItem({ type: 'response', text: `✓ Found AI SDK imports in: ${file}` });
+      if (
+        PYTHON_AI_SDK_IMPORT_PATTERNS.some((pattern) => pattern.test(content))
+      ) {
         return true;
       }
     } catch {
@@ -298,7 +341,6 @@ async function detectPythonProject(
       const lines = content.toLowerCase().split('\n');
       for (const pkg of PYTHON_AI_SDK_PACKAGES) {
         if (lines.some((line) => line.startsWith(pkg.toLowerCase()))) {
-          ui.addItem({ type: 'response', text: `✓ Found "${pkg}" in requirements.txt` });
           return true;
         }
       }
@@ -315,8 +357,10 @@ async function detectPythonProject(
       const contentLower = content.toLowerCase();
       for (const pkg of PYTHON_AI_SDK_PACKAGES) {
         // Check for package in dependencies (handles both regular and optional deps)
-        if (contentLower.includes(`"${pkg.toLowerCase()}"`) || contentLower.includes(`'${pkg.toLowerCase()}'`)) {
-          ui.addItem({ type: 'response', text: `✓ Found "${pkg}" in pyproject.toml` });
+        if (
+          contentLower.includes(`"${pkg.toLowerCase()}"`) ||
+          contentLower.includes(`'${pkg.toLowerCase()}'`)
+        ) {
           return true;
         }
       }
@@ -333,7 +377,6 @@ async function detectPythonProject(
       const contentLower = content.toLowerCase();
       for (const pkg of PYTHON_AI_SDK_PACKAGES) {
         if (contentLower.includes(pkg.toLowerCase())) {
-          ui.addItem({ type: 'response', text: `✓ Found "${pkg}" in Pipfile` });
           return true;
         }
       }
@@ -400,29 +443,8 @@ async function detectVercelAiSdkProject(
   const packageJsonPath = path.join(options.installDir, 'package.json');
   if (fs.existsSync(packageJsonPath)) {
     try {
-      const packageJsonContent = await fs.promises.readFile(
-        packageJsonPath,
-        'utf-8',
-      );
-      const packageJson = JSON.parse(packageJsonContent);
-      const deps = {
-        ...(packageJson.dependencies || {}),
-        ...(packageJson.devDependencies || {}),
-      };
-
-      // Check for 'ai' package or AI SDK providers
-      if ('ai' in deps) {
-        ui.addItem({ type: 'response', text: '✓ Found "ai" package in dependencies' });
-        return true;
-      }
-      if ('@ai-sdk/openai' in deps) {
-        ui.addItem({ type: 'response', text: '✓ Found "@ai-sdk/openai" package in dependencies' });
-        return true;
-      }
-      if ('@ai-sdk/anthropic' in deps) {
-        ui.addItem({ type: 'response', text: '✓ Found "@ai-sdk/anthropic" package in dependencies' });
-        return true;
-      }
+      await fs.promises.readFile(packageJsonPath, 'utf-8');
+      // package.json exists and is readable - continue to file check
     } catch {
       // package.json exists but couldn't be read/parsed - continue to file check
     }
@@ -447,7 +469,6 @@ async function detectVercelAiSdkProject(
       const content = await fs.promises.readFile(filePath, 'utf-8');
 
       if (aiSdkImportPatterns.some((pattern) => pattern.test(content))) {
-        ui.addItem({ type: 'response', text: `✓ Found AI SDK imports in source file: ${file}` });
         return true;
       }
     } catch {

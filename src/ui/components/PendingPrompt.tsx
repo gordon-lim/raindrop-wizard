@@ -34,7 +34,9 @@ interface PendingPromptProps {
  * Routes to the appropriate prompt component based on type.
  * Ensures only one input component is visible at a time.
  */
-export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement {
+export function PendingPrompt({
+  item,
+}: PendingPromptProps): React.ReactElement {
   switch (item.type) {
     case 'select':
       return <SelectPrompt options={item.props as SelectOptions<unknown>} />;
@@ -52,7 +54,9 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
     }
 
     case 'spinner':
-      return <SpinnerDisplay message={(item.props as { message: string }).message} />;
+      return (
+        <SpinnerDisplay message={(item.props as { message: string }).message} />
+      );
 
     case 'persistent-input':
       return <PersistentTextInput props={item.props as PersistentInputProps} />;
@@ -61,18 +65,26 @@ export function PendingPrompt({ item }: PendingPromptProps): React.ReactElement 
       return <ToolApprovalPrompt props={item.props as ToolApprovalProps} />;
 
     case 'clarifying-questions':
-      return <ClarifyingQuestionsPrompt props={item.props as ClarifyingQuestionsProps} />;
+      return (
+        <ClarifyingQuestionsPrompt
+          props={item.props as ClarifyingQuestionsProps}
+        />
+      );
 
     case 'plan-approval':
       return <PlanApprovalPrompt props={item.props as PlanApprovalProps} />;
 
     case 'feedback-select':
-      return <FeedbackSelectPrompt options={item.props as FeedbackSelectOptions<unknown>} />;
+      return (
+        <FeedbackSelectPrompt
+          options={item.props as FeedbackSelectOptions<unknown>}
+        />
+      );
 
     default:
       return (
         <Box>
-          <Text color="red">Unknown prompt type: {(item as PendingItem).type}</Text>
+          <Text color="red">Unknown prompt type: {item.type}</Text>
         </Box>
       );
   }

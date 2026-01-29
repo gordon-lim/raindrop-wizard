@@ -335,9 +335,12 @@ export function WizardProvider({
         props: {
           onSubmit: persistentInputConfig.onSubmit,
           onInterrupt: persistentInputConfig.onInterrupt,
-          placeholder: persistentInputConfig.placeholder ?? 'Type a message or press Esc to interrupt...',
+          placeholder:
+            persistentInputConfig.placeholder ??
+            'Type a message or press Esc to interrupt...',
           message: persistentInputConfig.message,
         } as PersistentInputProps,
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         resolve: () => {},
       };
     }
@@ -391,21 +394,18 @@ export function WizardProvider({
   );
 
   // Show text prompt - adds to queue
-  const text = useCallback(
-    (options: TextOptions): Promise<string | symbol> => {
-      return new Promise((resolve) => {
-        setPendingQueue((queue) => [
-          ...queue,
-          {
-            type: 'text',
-            props: options,
-            resolve: resolve as (value: unknown) => void,
-          },
-        ]);
-      });
-    },
-    [],
-  );
+  const text = useCallback((options: TextOptions): Promise<string | symbol> => {
+    return new Promise((resolve) => {
+      setPendingQueue((queue) => [
+        ...queue,
+        {
+          type: 'text',
+          props: options,
+          resolve: resolve as (value: unknown) => void,
+        },
+      ]);
+    });
+  }, []);
 
   // Show spinner - uses separate activeSpinner state so it can be visible alongside pendingItem
   const spinner = useCallback((): SpinnerInstance => {
@@ -491,7 +491,9 @@ export function WizardProvider({
 
   // Show feedback select prompt - adds to queue
   const feedbackSelect = useCallback(
-    <T,>(options: FeedbackSelectOptions<T>): Promise<FeedbackSelectResult<T>> => {
+    <T,>(
+      options: FeedbackSelectOptions<T>,
+    ): Promise<FeedbackSelectResult<T>> => {
       return new Promise((resolve) => {
         setPendingQueue((queue) => [
           ...queue,

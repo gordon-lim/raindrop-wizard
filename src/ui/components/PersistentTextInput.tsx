@@ -1,10 +1,10 @@
 /**
  * Unified text input component for the wizard.
- * 
+ *
  * Two modes:
  * 1. Callback mode: Uses onSubmit/onInterrupt callbacks (for persistent input during agent execution)
  * 2. Context mode: Uses resolvePending from WizardContext (for standalone text prompts)
- * 
+ *
  * Note: Spinner is managed separately via ui.spinner() - this component is just the input.
  */
 
@@ -73,7 +73,7 @@ export function PersistentTextInput({
     if (onSubmit) {
       // Has submit callback - use it
       if (submittedValue.trim()) {
-        onSubmit(submittedValue.trim());
+        void Promise.resolve(onSubmit(submittedValue.trim()));
         setValue('');
       }
     } else {

@@ -46,8 +46,10 @@ function generateEditDiff(
  * Extract summary for Edit tool (line changes)
  */
 function extractEditSummary(input: Record<string, unknown>): string {
-  const oldString = typeof input.old_string === 'string' ? input.old_string : '';
-  const newString = typeof input.new_string === 'string' ? input.new_string : '';
+  const oldString =
+    typeof input.old_string === 'string' ? input.old_string : '';
+  const newString =
+    typeof input.new_string === 'string' ? input.new_string : '';
 
   const oldLines = oldString ? oldString.split('\n').length : 0;
   const newLines = newString ? newString.split('\n').length : 0;
@@ -62,7 +64,8 @@ function extractEditSummary(input: Record<string, unknown>): string {
 
   const parts: string[] = [];
   if (added > 0) parts.push(`Added ${added} line${added === 1 ? '' : 's'}`);
-  if (removed > 0) parts.push(`removed ${removed} line${removed === 1 ? '' : 's'}`);
+  if (removed > 0)
+    parts.push(`removed ${removed} line${removed === 1 ? '' : 's'}`);
 
   return parts.length > 0 ? parts.join(', ') : 'No changes';
 }
@@ -73,9 +76,8 @@ function extractEditSummary(input: Record<string, unknown>): string {
 function extractWriteSummary(input: Record<string, unknown>): string {
   const content = typeof input.content === 'string' ? input.content : '';
   const lines = content ? content.split('\n').length : 0;
-  const fileName = typeof input.path === 'string'
-    ? input.path.split('/').pop()
-    : 'file';
+  const fileName =
+    typeof input.path === 'string' ? input.path.split('/').pop() : 'file';
   return `Wrote ${lines} line${lines === 1 ? '' : 's'} to ${fileName}`;
 }
 
@@ -86,15 +88,18 @@ function extractEditWriteInfo(
   toolName: string,
   input: Record<string, unknown>,
 ): { diffContent?: string; fileName?: string } {
-  const fileName = typeof input.file_path === 'string'
-    ? input.file_path
-    : typeof input.path === 'string'
+  const fileName =
+    typeof input.file_path === 'string'
+      ? input.file_path
+      : typeof input.path === 'string'
       ? input.path
       : undefined;
 
   if (toolName === 'Edit' && fileName) {
-    const oldString = typeof input.old_string === 'string' ? input.old_string : '';
-    const newString = typeof input.new_string === 'string' ? input.new_string : '';
+    const oldString =
+      typeof input.old_string === 'string' ? input.old_string : '';
+    const newString =
+      typeof input.new_string === 'string' ? input.new_string : '';
     const diffContent = generateEditDiff(fileName, oldString, newString);
     return { diffContent, fileName };
   }
@@ -117,9 +122,10 @@ export function extractResultSummary(
   input?: Record<string, unknown>,
 ): string | undefined {
   // Handle string content
-  const content = typeof resultContent === 'string'
-    ? resultContent
-    : Array.isArray(resultContent)
+  const content =
+    typeof resultContent === 'string'
+      ? resultContent
+      : Array.isArray(resultContent)
       ? resultContent.map((c: any) => c.text || '').join('\n')
       : '';
 
@@ -128,7 +134,10 @@ export function extractResultSummary(
   switch (toolName) {
     case 'Glob': {
       // Count non-empty lines (each line is a file path)
-      const lines = content.trim().split('\n').filter((l: string) => l.trim());
+      const lines = content
+        .trim()
+        .split('\n')
+        .filter((l: string) => l.trim());
       return `Found ${lines.length} files`;
     }
     case 'Read': {
@@ -138,7 +147,10 @@ export function extractResultSummary(
     }
     case 'Grep': {
       // Count match lines
-      const lines = content.trim().split('\n').filter((l: string) => l.trim());
+      const lines = content
+        .trim()
+        .split('\n')
+        .filter((l: string) => l.trim());
       return `Found ${lines.length} matches`;
     }
     case 'Edit': {
@@ -195,7 +207,10 @@ export function processSDKMessage(
             const toolName = block.name || 'Unknown tool';
             const toolInput = block.input || {};
             const toolUseId = block.id;
-            logToFile(`Tool use requested: ${toolName} (id: ${toolUseId})`, toolInput);
+            logToFile(
+              `Tool use requested: ${toolName} (id: ${toolUseId})`,
+              toolInput,
+            );
 
             // Skip storing/displaying internal SDK tools
             if (INTERNAL_TOOLS.has(toolName)) {
@@ -293,7 +308,8 @@ export function processSDKMessage(
           for (const err of message.errors) {
             // Check if error is interrupt-related
             const errStr = String(err);
-            const isInterruptError = errStr.includes('aborted') ||
+            const isInterruptError =
+              errStr.includes('aborted') ||
               errStr.includes('interrupted') ||
               errStr.includes('403');
             if (!isInterruptError) {

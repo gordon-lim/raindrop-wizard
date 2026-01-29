@@ -7,8 +7,18 @@ import path from 'path';
 import { createRequire } from 'module';
 import ui from '../utils/ui.js';
 import type { AgentQueryHandle } from '../ui/types.js';
-import { debug, logToFile, initLogFile, LOG_FILE_PATH } from '../utils/debug.js';
-import { createCanUseToolHandler, createAgentQueryHandle, type PendingToolCall, type SessionInfo } from './handlers.js';
+import {
+  debug,
+  logToFile,
+  initLogFile,
+  LOG_FILE_PATH,
+} from '../utils/debug.js';
+import {
+  createCanUseToolHandler,
+  createAgentQueryHandle,
+  type PendingToolCall,
+  type SessionInfo,
+} from './handlers.js';
 import { processSDKMessage } from './sdk-messages.js';
 import { createCompletionMcpServer } from './mcp.js';
 import type { WizardOptions } from '../utils/types.js';
@@ -29,7 +39,6 @@ function getClaudeCodeExecutablePath(): string {
 
 // Using `any` because typed imports from ESM modules require import attributes
 // syntax which prettier cannot parse. See PR discussion for details.
-type SDKMessage = any;
 type McpServersConfig = any;
 
 // Re-export AgentQueryHandle for external use
@@ -90,10 +99,16 @@ export function initializeAgent(
       });
     }
 
-    ui.addItem({ type: 'step', text: `I'll keep verbose logs for this session at: ${LOG_FILE_PATH}` });
+    ui.addItem({
+      type: 'step',
+      text: `I'll keep verbose logs for this session at: ${LOG_FILE_PATH}`,
+    });
     return agentRunConfig;
   } catch (error) {
-    ui.addItem({ type: 'error', text: `Failed to initialize agent: ${(error as Error).message}` });
+    ui.addItem({
+      type: 'error',
+      text: `Failed to initialize agent: ${(error as Error).message}`,
+    });
     logToFile('Agent initialization error:', error);
     debug('Agent initialization error:', error);
     throw error;
@@ -108,6 +123,7 @@ export interface RunAgentConfig {
   successMessage?: string;
   resume?: string;
   accessToken: string;
+  orgId: string;
 }
 
 /**
@@ -128,8 +144,7 @@ export async function runAgentLoop(
     successMessage = 'Raindrop integration complete',
     resume,
     accessToken,
-  } = config ?? {} as RunAgentConfig;
-
+  } = config ?? ({} as RunAgentConfig);
 
   // Add header to indicate start of interactive agent phase
   ui.addItem({ type: 'phase', text: '### Agent ###' });
@@ -143,6 +158,7 @@ export async function runAgentLoop(
   let currentSessionId: string | undefined = resume;
   let handle: AgentQueryHandle;
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const spinner = ui.spinner();
 
@@ -181,7 +197,7 @@ export async function runAgentLoop(
     const completionMcpServer = createCompletionMcpServer(hasCompletedWorkRef);
 
     // Define callbacks for persistent input
-    const handlePersistentSubmit = async (message: string) => {
+    const handlePersistentSubmit = (message: string) => {
       if (isInterruptingRef.value) {
         // Already interrupted - resolve the waiting promise with this message
         logToFile('User submitted message after interrupt:', message);
@@ -193,8 +209,10 @@ export async function runAgentLoop(
       } else {
         // Not yet interrupted - store message and trigger interrupt
         pendingUserMessageRef.value = message;
-        logToFile('User submitted message while agent running - triggering interrupt');
-        handle.interrupt();
+        logToFile(
+          'User submitted message while agent running - triggering interrupt',
+        );
+        void handle.interrupt();
       }
     };
 
@@ -202,7 +220,7 @@ export async function runAgentLoop(
       logToFile('User requested interrupt (Esc)');
       // Stop spinner immediately - persistent input stays visible
       spinner.stop();
-      handle.interrupt();
+      void handle.interrupt();
     };
 
     spinner.start(spinnerMessage);
@@ -215,6 +233,7 @@ export async function runAgentLoop(
     const sessionInfo: SessionInfo = {
       sessionId: options.sessionId,
       accessToken,
+      orgId: config?.orgId ?? '',
     };
 
     queryObject = query({
@@ -226,7 +245,7 @@ export async function runAgentLoop(
         mcpServers: {
           'raindrop-wizard': completionMcpServer,
         },
-        systemPrompt: "{WIZARD_SYSTEM_PROMPT}",
+        systemPrompt: '{WIZARD_SYSTEM_PROMPT}',
         env: { ...process.env },
         resume: currentSessionId,
         canUseTool: createCanUseToolHandler(sessionInfo),
@@ -247,13 +266,33 @@ export async function runAgentLoop(
 
     // Process the query stream
     for await (const message of queryObject) {
+      // FIX: Check interrupt flag at start of each iteration
+      // This handles the case where interrupt() was called before SDK initialized
+      if (isInterruptingRef.value) {
+        logToFile(
+          'Breaking out of for-await loop - interrupt flag set before SDK init',
+        );
+        // Capture session_id from init message if available before breaking
+        if (message.session_id && !sessionId) {
+          sessionId = message.session_id;
+          ui.setAgentState({ sessionId });
+        }
+        break;
+      }
+
       // Capture session_id from any message
       if (message.session_id && !sessionId) {
         sessionId = message.session_id;
         ui.setAgentState({ sessionId });
       }
 
-      processSDKMessage(message, options, collectedText, pendingToolCalls, isInterruptingRef.value);
+      processSDKMessage(
+        message,
+        options,
+        collectedText,
+        pendingToolCalls,
+        isInterruptingRef.value,
+      );
     }
 
     const durationMs = Date.now() - startTime;
@@ -262,12 +301,15 @@ export async function runAgentLoop(
     logToFile('Completion status:', hasCompletedWorkRef.value);
 
     // Check if we need user input to continue (either stream ended without completion or interrupted)
-    const needsUserInput = !hasCompletedWorkRef.value && !waitingForUserInputRef.value && sessionId;
+    const needsUserInput =
+      !hasCompletedWorkRef.value && !waitingForUserInputRef.value && sessionId;
     const wasInterrupted = waitingForUserInputRef.value && sessionId;
 
     if (needsUserInput || wasInterrupted) {
       if (needsUserInput) {
-        logToFile('Stream ended but agent has not called CompleteIntegration - waiting for user response');
+        logToFile(
+          'Stream ended but agent has not called CompleteIntegration - waiting for user response',
+        );
       } else {
         logToFile('Stream ended after interrupt, waiting for user input');
       }
@@ -323,4 +365,3 @@ export async function runAgentLoop(
     return { sessionId, handle };
   }
 }
-

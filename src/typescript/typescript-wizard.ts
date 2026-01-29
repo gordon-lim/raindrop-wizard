@@ -8,8 +8,6 @@ import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import ui from '../utils/ui.js';
-import { abort } from '../utils/clack-utils.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -31,33 +29,9 @@ const TYPESCRIPT_AGENT_CONFIG: FrameworkConfig = {
   },
 
   prompts: {
-    getDocumentation: async () => {
+    getDocumentation: async (options) => {
       try {
-        // Ask about OTEL provider
-        const otelProvider = await ui.select({
-          message: 'Are you using Sentry, or another OTEL provider?',
-          options: [
-            {
-              value: '',
-              label: 'Raindrop built-in observability',
-              hint: 'No OpenTelemetry provider needed.',
-            },
-            {
-              value: 'sentry',
-              label: 'Sentry',
-              hint: 'Send OpenTelemetry data to Sentry.',
-            },
-            {
-              value: 'other',
-              label: 'Another OpenTelemetry provider',
-              hint: 'Use any OTEL-compatible backend.',
-            },
-          ],
-        });
-
-        if (ui.isCancel(otelProvider)) {
-          abort('Setup cancelled', 0);
-        }
+        const { otelProvider } = options;
 
         // __dirname in compiled code is dist/src/typescript/, so go up to project root then to src/typescript/
         const baseDocsPath = path.resolve(

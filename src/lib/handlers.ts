@@ -41,8 +41,15 @@ export interface AgentQueryHandleDeps {
  * Create an AgentQueryHandle for external control of the agent.
  * Handles interrupts by marking pending tool calls (keeps persistent input running).
  */
-export function createAgentQueryHandle(deps: AgentQueryHandleDeps): AgentQueryHandle {
-  const { isInterruptingRef, waitingForUserInputRef, pendingToolCalls, getQueryObject } = deps;
+export function createAgentQueryHandle(
+  deps: AgentQueryHandleDeps,
+): AgentQueryHandle {
+  const {
+    isInterruptingRef,
+    waitingForUserInputRef,
+    pendingToolCalls,
+    getQueryObject,
+  } = deps;
 
   return {
     interrupt: async () => {
@@ -88,7 +95,9 @@ export function createAgentQueryHandle(deps: AgentQueryHandleDeps): AgentQueryHa
     },
     sendMessage: () => {
       // No-op: use interrupt + resume pattern instead of streaming messages
-      logToFile('sendMessage called but not supported - use interrupt and resume');
+      logToFile(
+        'sendMessage called but not supported - use interrupt and resume',
+      );
     },
   };
 }
@@ -127,9 +136,10 @@ async function handleToolApproval(
   logToFile('Showing tool approval UI:', { toolName, input });
 
   // Extract file path
-  const fileName = typeof input.file_path === 'string'
-    ? input.file_path
-    : typeof input.path === 'string'
+  const fileName =
+    typeof input.file_path === 'string'
+      ? input.file_path
+      : typeof input.path === 'string'
       ? input.path
       : undefined;
 
@@ -142,7 +152,11 @@ async function handleToolApproval(
     fileName
   ) {
     // Edit: show old -> new diff
-    diffContent = generateEditDiff(fileName, input.old_string, input.new_string);
+    diffContent = generateEditDiff(
+      fileName,
+      input.old_string,
+      input.new_string,
+    );
   } else if (
     toolName === 'Write' &&
     typeof input.content === 'string' &&
@@ -159,7 +173,8 @@ async function handleToolApproval(
   const props = {
     toolName,
     input,
-    description: typeof input.description === 'string' ? input.description : undefined,
+    description:
+      typeof input.description === 'string' ? input.description : undefined,
     diffContent,
     fileName,
   };
@@ -215,6 +230,7 @@ async function handleClarifyingQuestions(
 export interface SessionInfo {
   sessionId: string;
   accessToken: string;
+  orgId: string;
 }
 
 /**
@@ -228,9 +244,7 @@ async function handlePlanApproval(
 ): Promise<ToolApprovalResult> {
   logToFile('Handling ExitPlanMode:', input);
 
-  const planContent = typeof input.plan === 'string'
-    ? input.plan
-    : '';
+  const planContent = typeof input.plan === 'string' ? input.plan : '';
 
   try {
     const result = await ui.planApproval({ planContent });
@@ -239,7 +253,12 @@ async function handlePlanApproval(
     if (result.approved) {
       // Send session update with approved plan
       if (sessionInfo) {
-        sendSessionUpdate(sessionInfo.sessionId, planContent, sessionInfo.accessToken);
+        sendSessionUpdate(
+          sessionInfo.sessionId,
+          planContent,
+          sessionInfo.accessToken,
+          sessionInfo.orgId,
+        );
       }
 
       // User approved the plan - allow the tool
@@ -276,7 +295,7 @@ const AUTO_APPROVED_TOOLS = new Set([
  */
 function isSafeBashCommand(command: string): boolean {
   const trimmed = command.trim();
-  return SAFE_BASH_PATTERNS.some(pattern => {
+  return SAFE_BASH_PATTERNS.some((pattern) => {
     if (pattern.startsWith('*')) {
       // Suffix match (e.g., '*--version')
       return trimmed.endsWith(pattern.slice(1));

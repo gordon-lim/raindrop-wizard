@@ -29,7 +29,10 @@ import type {
   FeedbackSelectOptions,
   FeedbackSelectResult,
 } from '../ui/types.js';
-import type { HistoryItemInput, AgentState } from '../ui/contexts/WizardContext.js';
+import type {
+  HistoryItemInput,
+  AgentState,
+} from '../ui/contexts/WizardContext.js';
 
 // Re-export types for convenience
 export type {
@@ -80,7 +83,7 @@ function getActions() {
 
 /**
  * Add an item to history (direct, like gemini-cli).
- * 
+ *
  * @example
  * ui.addItem({ type: 'response', text: 'Starting setup...' });
  * ui.addItem({ type: 'success', text: 'Done!' });
@@ -94,8 +97,10 @@ export function addItem(item: HistoryItemInput): void {
 /**
  * Display a select prompt and return the selected value.
  */
-export async function select<T>(options: SelectOptions<T>): Promise<T | symbol> {
-  return getActions().select(options) as Promise<T | symbol>;
+export async function select<T>(
+  options: SelectOptions<T>,
+): Promise<T | symbol> {
+  return getActions().select(options);
 }
 
 /**

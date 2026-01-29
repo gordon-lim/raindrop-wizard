@@ -1,12 +1,24 @@
-import { abortIfCancelled } from './utils/clack-utils.js';
+import {
+  abortIfCancelled,
+  askForAIConsent,
+  abort,
+} from './utils/clack-utils.js';
 
-import type { WizardOptions } from './utils/types.js';
+import type {
+  WizardOptions,
+  OtelPlatform,
+  OtelProvider,
+} from './utils/types.js';
 
 import { getIntegrationDescription, Integration } from './lib/constants.js';
 import { readEnvironment } from './utils/environment.js';
 import ui from './utils/ui.js';
 import path from 'path';
-import { INTEGRATION_CONFIG, INTEGRATION_ORDER, type SetupDetail } from './lib/config.js';
+import {
+  INTEGRATION_CONFIG,
+  INTEGRATION_ORDER,
+  type SetupDetail,
+} from './lib/config.js';
 import { runPythonWizard } from './python/python-wizard.js';
 import { runTypescriptWizard } from './typescript/typescript-wizard.js';
 import { runVercelAiSdkWizard } from './vercelAiSdk/vercelAiSdk-wizard.js';
@@ -36,6 +48,32 @@ type Args = {
   default?: boolean;
 };
 
+async function handleTypescriptSetup(wizardOptions: WizardOptions) {
+  const otelProvider = await abortIfCancelled(
+    ui.select<OtelProvider>({
+      message: 'Are you using Sentry, or another OTEL provider?',
+      options: [
+        {
+          value: '',
+          label: 'Raindrop built-in observability',
+          hint: 'No OpenTelemetry provider needed.',
+        },
+        {
+          value: 'sentry',
+          label: 'Sentry',
+          hint: 'Send OpenTelemetry data to Sentry.',
+        },
+        {
+          value: 'other',
+          label: 'Another OpenTelemetry provider',
+          hint: 'Use any OTEL-compatible backend.',
+        },
+      ],
+    }),
+  );
+  await runTypescriptWizard({ ...wizardOptions, otelProvider });
+}
+
 async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
   const choice = await abortIfCancelled(
     ui.select({
@@ -43,12 +81,12 @@ async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
       options: [
         {
           value: 'otel',
-          label: "Vercel AI SDK' OTel integration",
+          label: 'Auto tracking via OpenTelemetry',
           hint: 'no attachments, no custom properties',
         },
         {
           value: 'typescript',
-          label: 'Raindrop Typescript SDK',
+          label: 'Custom setup with the Raindrop Typescript SDK',
           hint: 'attachments, custom properties',
         },
       ],
@@ -56,9 +94,20 @@ async function handleVercelAiSdkSetup(wizardOptions: WizardOptions) {
   );
 
   if (choice === 'otel') {
-    await runVercelAiSdkWizard(wizardOptions);
+    const otelPlatform = await abortIfCancelled(
+      ui.select<OtelPlatform>({
+        message: 'How do you want OpenTelemetry setup?',
+        options: [
+          { value: 'next', label: 'Next.js' },
+          { value: 'node', label: 'Node.js' },
+          { value: 'cloudflare', label: 'Cloudflare Workers' },
+          { value: 'sentry', label: 'Sentry (Next.js)' },
+        ],
+      }),
+    );
+    await runVercelAiSdkWizard({ ...wizardOptions, otelPlatform });
   } else {
-    await runTypescriptWizard(wizardOptions);
+    await handleTypescriptSetup(wizardOptions);
   }
 }
 
@@ -88,20 +137,30 @@ export async function runWizard(argv: Args) {
     compiledSetup: '', // Will be set after collecting setup details
   };
 
-
   ui.addItem({
     type: 'phase',
     text: '### Setup ###',
   });
 
-  ui.addItem({ type: 'response', text: `✨ Welcome to the Raindrop wizard! I will help you set up Raindrop for your AI application. Thank you for using Raindrop! 💧` });
+  ui.addItem({
+    type: 'response',
+    text: `✨ Welcome to the Raindrop wizard! I will help you set up Raindrop for your AI application. Thank you for using Raindrop! 💧`,
+  });
+
+  const aiConsent = await askForAIConsent(wizardOptions);
+  if (!aiConsent) {
+    abort(
+      `This wizard uses a Claude agent to intelligently modify your project. Please view the docs to set up Raindrop manually instead: https://raindrop.ai/docs`,
+      0,
+    );
+  }
 
   const integration =
     finalArgs.integration ?? (await getIntegrationForSetup(wizardOptions));
 
-  const setupDetails = await INTEGRATION_CONFIG[integration].collectSetupDetails(
-    wizardOptions.installDir,
-  );
+  const setupDetails = await INTEGRATION_CONFIG[
+    integration
+  ].collectSetupDetails(wizardOptions.installDir);
   const compiledSetup = compileSetupDetails(setupDetails);
   wizardOptions = { ...wizardOptions, compiledSetup };
 
@@ -111,7 +170,7 @@ export async function runWizard(argv: Args) {
         await runPythonWizard(wizardOptions);
         break;
       case Integration.typescript:
-        await runTypescriptWizard(wizardOptions);
+        await handleTypescriptSetup(wizardOptions);
         break;
       case Integration.vercelAiSdk:
         await handleVercelAiSdkSetup(wizardOptions);
@@ -119,7 +178,6 @@ export async function runWizard(argv: Args) {
       default:
         ui.addItem({ type: 'error', text: 'No setup wizard selected!' });
     }
-
   } catch (error) {
     const docsUrl =
       (INTEGRATION_CONFIG as Record<string, { docsUrl: string }>)[integration]
@@ -159,20 +217,42 @@ async function getIntegrationForSetup(
   const detectedIntegration = await detectIntegration(options);
 
   if (detectedIntegration) {
-    ui.addItem({
-      type: 'success',
-      text: `Detected integration: ${getIntegrationDescription(detectedIntegration)}`,
-    });
-    return detectedIntegration;
+    const isCorrect = await abortIfCancelled(
+      ui.select<boolean>({
+        message: `I detected your AI app uses ${chalk.bgCyan.black(
+          getIntegrationDescription(detectedIntegration),
+        )} for its AI logic. Is this correct?`,
+        options: [
+          { value: true, label: 'Yes' },
+          { value: false, label: 'No' },
+        ],
+      }),
+    );
+
+    if (isCorrect) {
+      return detectedIntegration;
+    }
   }
 
   const integration: Integration = await abortIfCancelled(
     ui.select({
-      message: 'What do you want to set up?',
+      message: 'What does your AI app use for its AI logic?',
       options: [
-        { value: Integration.python, label: 'Python' },
-        { value: Integration.typescript, label: 'TypeScript' },
-        { value: Integration.vercelAiSdk, label: 'Vercel AI SDK' },
+        {
+          value: Integration.python,
+          label: 'a Python SDK',
+          hint: 'e.g. openai-python, anthropic-sdk-python, langchain',
+        },
+        {
+          value: Integration.typescript,
+          label: 'a TypeScript SDK',
+          hint: 'e.g. openai-node, langchain-js',
+        },
+        {
+          value: Integration.vercelAiSdk,
+          label: 'the Vercel AI SDK',
+          hint: 'i.e. vercel/ai',
+        },
       ],
     }),
   );

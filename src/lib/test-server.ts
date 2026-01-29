@@ -49,7 +49,10 @@ export interface ReceivedEvent {
 /**
  * Fetch events from the API endpoint, filtered by wizard session ID
  */
-async function fetchEvents(accessToken: string, wizardSessionId: string): Promise<ApiEvent[]> {
+async function fetchEvents(
+  accessToken: string,
+  wizardSessionId: string,
+): Promise<ApiEvent[]> {
   try {
     const response = await fetch(EVENTS_LIST_ENDPOINT, {
       headers: {
@@ -86,9 +89,9 @@ export async function testIntegration(
 
   const testSpinner = ui.spinner();
   testSpinner.start(
-    chalk.cyan('Test your integration: ') +
-    chalk.dim('Interact with your AI. Events will appear above. ') +
-    chalk.yellow('Press any key when done testing...'),
+    String(chalk.cyan('Test your integration: ')) +
+      String(chalk.dim('Interact with your AI. Events will appear above. ')) +
+      String(chalk.yellow('Press any key when done testing...')),
   );
 
   // Start polling in the background
@@ -143,7 +146,11 @@ export async function testIntegration(
     message: 'Do the results look good?',
     options: [
       { value: true, label: 'Yes, looks good - proceed' },
-      { value: false, label: 'No, I need to provide feedback', allowTextInput: true },
+      {
+        value: false,
+        label: 'No, I need to provide feedback',
+        allowTextInput: true,
+      },
     ],
   });
 
@@ -156,10 +163,7 @@ export async function testIntegration(
   const userFeedback = result.value as string;
 
   // Build feedback prompt for agent
-  const feedbackPrompt = buildTestFeedbackMessage(
-    receivedEvents,
-    userFeedback,
-  );
+  const feedbackPrompt = buildTestFeedbackMessage(receivedEvents, userFeedback);
 
   return { shouldRetry: true, feedbackPrompt };
 }

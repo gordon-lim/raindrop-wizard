@@ -1,15 +1,8 @@
-import {
-  SPINNER_MESSAGE,
-  type FrameworkConfig,
-} from './framework-config.js';
+import { SPINNER_MESSAGE, type FrameworkConfig } from './framework-config.js';
 import type { WizardOptions } from '../utils/types.js';
 import type { PackageJson } from '../utils/package-json-types.js';
-import {
-  abort,
-  askForAIConsent,
-  confirmContinueIfNoOrDirtyGitRepo,
-} from '../utils/clack-utils.js';
-import { writeApiKeyToEnv } from '../utils/environment.js';
+import { confirmContinueIfNoOrDirtyGitRepo } from '../utils/clack-utils.js';
+import { saveWriteKeyToEnv } from '../utils/environment.js';
 import fs from 'fs';
 import path from 'path';
 import ui from '../utils/ui.js';
@@ -19,9 +12,12 @@ import Chalk from 'chalk';
 
 // chalk v2 types don't work well with ESM default imports
 const chalk = Chalk as any;
-import { askForWizardLogin, validateProjectAccess } from '../utils/clack-utils.js';
-import { getUserApiKey } from '../utils/oauth.js';
-import { Integration, ANTHROPIC_BASE_URL } from './constants.js';
+import {
+  askForWizardLogin,
+  validateProjectAccess,
+} from '../utils/clack-utils.js';
+import { getOrgWriteKey } from '../utils/oauth.js';
+import { ANTHROPIC_BASE_URL } from './constants.js';
 import { buildIntegrationPrompt } from './agent-prompts.js';
 import { testIntegration } from './test-server.js';
 import { sendSessionInit } from '../utils/session.js';
@@ -34,15 +30,6 @@ export async function runAgentWizard(
   config: FrameworkConfig,
   options: WizardOptions,
 ): Promise<void> {
-  // Setup phase
-  const aiConsent = await askForAIConsent(options);
-  if (!aiConsent) {
-    abort(
-      `This wizard uses an LLM agent to intelligently modify your project. Please view the docs to set up Raindrop for your ${config.metadata.name} SDK manually instead: ${config.metadata.docsUrl}`,
-      0,
-    );
-  }
-
   // Check if the current directory is a git repository and has uncommitted or untracked changes; prompt the user to continue if so.
   await confirmContinueIfNoOrDirtyGitRepo(options);
 
@@ -63,7 +50,8 @@ export async function runAgentWizard(
         error,
       );
       debug(
-        `Skipping package.json: ${error instanceof Error ? error.message : String(error)
+        `Skipping package.json: ${
+          error instanceof Error ? error.message : String(error)
         }`,
       );
     }
@@ -71,31 +59,46 @@ export async function runAgentWizard(
 
   const token = await askForWizardLogin({ signup: false });
 
-  const apiKeySpinner = ui.spinner();
-  apiKeySpinner.start('Retrieving your Raindrop API key...');
+  const writeKeySpinner = ui.spinner();
+  writeKeySpinner.start('Retrieving your Raindrop write key...');
 
   await validateProjectAccess(token.access_token);
 
-  // Send session init now that we have the access token
-  sendSessionInit(options.sessionId, options.compiledSetup, token.access_token);
+  const { writeKey, orgId } = await getOrgWriteKey(token.access_token);
 
-  const apiKey = await getUserApiKey(token.access_token);
+  // Send session init now that we have the access token and orgId
+  sendSessionInit(
+    options.sessionId,
+    options.compiledSetup,
+    token.access_token,
+    orgId,
+  );
 
-  await writeApiKeyToEnv(apiKey, options.installDir);
+  await saveWriteKeyToEnv(writeKey, options.installDir);
 
-  apiKeySpinner.stop('I retrieved your API key and saved it to .env');
+  writeKeySpinner.stop('I retrieved your write key and saved it to .env');
 
   const frameworkVersion = config.detection.getVersion(packageJson);
 
   // Build integration prompt
-  const integrationPrompt = await buildIntegrationPrompt(config, {
-    frameworkVersion: frameworkVersion || 'latest',
-    sessionId: options.sessionId,
-  });
+  const integrationPrompt = await buildIntegrationPrompt(
+    config,
+    {
+      frameworkVersion: frameworkVersion || 'latest',
+      sessionId: options.sessionId,
+    },
+    options,
+  );
 
   if (options.debug) {
-    ui.addItem({ type: 'response', text: `Integration prompt logged to: ${LOG_FILE_PATH}` });
-    ui.addItem({ type: 'response', text: `Prompt preview: ${integrationPrompt.substring(0, 200)}...` });
+    ui.addItem({
+      type: 'response',
+      text: `Integration prompt logged to: ${LOG_FILE_PATH}`,
+    });
+    ui.addItem({
+      type: 'response',
+      text: `Prompt preview: ${integrationPrompt.substring(0, 200)}...`,
+    });
   }
 
   process.env.ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL;
@@ -110,25 +113,18 @@ export async function runAgentWizard(
     options,
   );
 
-  // Unified loop: run agent, then test, repeat if user provides feedback
-  // TODO: Enable test integration for vercelaisdk once implemented
   let prompt = integrationPrompt;
-  // let prompt = "First, write a plan to write a hello world script to a plan file then call the ExitPlanMode tool.";
   let resume: string | undefined = undefined;
   let shouldContinue = true;
 
   while (shouldContinue) {
-    const agentResult = await runAgentLoop(
-      agent,
-      prompt,
-      options,
-      {
-        spinnerMessage: SPINNER_MESSAGE,
-        successMessage: config.ui.successMessage,
-        resume,
-        accessToken: token.access_token,
-      },
-    );
+    const agentResult = await runAgentLoop(agent, prompt, options, {
+      spinnerMessage: SPINNER_MESSAGE,
+      successMessage: config.ui.successMessage,
+      resume,
+      accessToken: token.access_token,
+      orgId,
+    });
 
     const result = await testIntegration(options, token.access_token);
 
@@ -150,8 +146,8 @@ ${nextSteps.map((step) => `• ${step}`).join('\n')}
 
 Learn more: ${chalk.cyan(config.metadata.docsUrl)}
 ${chalk.dim(
-    'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
-  )}`;
+  'Note: This wizard uses an LLM agent to analyze and modify your project. Please review the changes made.',
+)}`;
 
   ui.addItem({ type: 'success', text: outroMessage });
 }

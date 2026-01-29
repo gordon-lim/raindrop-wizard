@@ -8,7 +8,7 @@ import opn from 'opn';
 import { z } from 'zod';
 import ui from './ui.js';
 import {
-  API_KEY_ENDPOINT,
+  WRITE_KEY_ENDPOINT,
   ISSUES_URL,
   OAUTH_AUTHORIZE_URL,
   OAUTH_CLIENT_ID,
@@ -139,15 +139,17 @@ async function startCallbackServer(
           <html>
             <head>
               <meta charset="UTF-8">
-              <title>Raindrop wizard - Authorization ${isAccessDenied ? 'cancelled' : 'failed'
-          }</title>
+              <title>Raindrop wizard - Authorization ${
+                isAccessDenied ? 'cancelled' : 'failed'
+              }</title>
               ${OAUTH_CALLBACK_STYLES}
             </head>
             <body>
-              <p>${isAccessDenied
-            ? 'Authorization cancelled.'
-            : `Authorization failed.`
-          }</p>
+              <p>${
+                isAccessDenied
+                  ? 'Authorization cancelled.'
+                  : `Authorization failed.`
+              }</p>
               <p>Return to your terminal.</p>
             </body>
           </html>
@@ -227,7 +229,9 @@ async function exchangeCodeForToken(
   });
 
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Token exchange failed: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();
@@ -242,26 +246,37 @@ export async function getUserInfo(accessToken: string): Promise<OAuthUserInfo> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get user info: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to get user info: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();
   return OAuthUserInfoSchema.parse(data);
 }
 
-export async function getUserApiKey(accessToken: string): Promise<string> {
-  const response = await fetch(API_KEY_ENDPOINT, {
+export interface WriteKeyResponse {
+  writeKey: string;
+  orgId: string;
+}
+
+export async function getOrgWriteKey(
+  accessToken: string,
+): Promise<WriteKeyResponse> {
+  const response = await fetch(WRITE_KEY_ENDPOINT, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get API key: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to get org write key: ${response.status} ${response.statusText}`,
+    );
   }
 
-  const data = (await response.json()) as { api_key: string };
-  return data.api_key;
+  const data = (await response.json()) as { api_key: string; org_id: string };
+  return { writeKey: data.api_key, orgId: data.org_id };
 }
 
 export async function performOAuthFlow(
@@ -302,12 +317,13 @@ export async function performOAuthFlow(
     type: 'response',
     text: `${chalk.bold(
       "If the browser window didn't open automatically, please open the following link to be redirected to Raindrop:",
-    )}\n\n${chalk.cyan(urlToOpen)}${config.signup
-      ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
-        localLoginUrl,
-      )}`
-      : ``
-      }`,
+    )}\n\n${chalk.cyan(urlToOpen)}${
+      config.signup
+        ? `\n\nIf you already have an account, you can use this link:\n\n${chalk.cyan(
+            localLoginUrl,
+          )}`
+        : ``
+    }`,
   });
 
   if (process.env.NODE_ENV !== 'test') {
@@ -346,7 +362,10 @@ export async function performOAuthFlow(
     const error = e instanceof Error ? e : new Error('Unknown error');
 
     if (error.message.includes('timeout')) {
-      ui.addItem({ type: 'error', text: 'Authorization timed out. Please try again.' });
+      ui.addItem({
+        type: 'error',
+        text: 'Authorization timed out. Please try again.',
+      });
     } else if (error.message.includes('access_denied')) {
       ui.addItem({
         type: 'response',
@@ -359,10 +378,11 @@ export async function performOAuthFlow(
     } else {
       ui.addItem({
         type: 'error',
-        text: `${chalk.red('Authorization failed:')}\n\n${error.message
-          }\n\n${chalk.dim(
-            `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
-          )}`,
+        text: `${chalk.red('Authorization failed:')}\n\n${
+          error.message
+        }\n\n${chalk.dim(
+          `If you think this is a bug in the Raindrop wizard, please create an issue:\n${ISSUES_URL}`,
+        )}`,
       });
     }
 

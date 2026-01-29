@@ -7,7 +7,11 @@
  */
 
 import type { PendingItem } from '../WizardContext.js';
-import type { ToolApprovalProps, ToolApprovalResult, PersistentInputProps } from '../../types.js';
+import type {
+  ToolApprovalProps,
+  ToolApprovalResult,
+  PersistentInputProps,
+} from '../../types.js';
 
 // Simulate the queue operations directly (extracted logic from WizardContext)
 // This tests the core queue behavior without React rendering
@@ -45,6 +49,7 @@ describe('WizardContext pending queue logic', () => {
             onInterrupt: this.persistentInputConfig.onInterrupt,
             placeholder: 'Type a message...',
           } as PersistentInputProps,
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
           resolve: () => {},
         };
       }
@@ -88,7 +93,9 @@ describe('WizardContext pending queue logic', () => {
      */
     startPersistentInput(): void {
       this.persistentInputConfig = {
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         onSubmit: () => {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         onInterrupt: () => {},
       };
     }
@@ -106,18 +113,26 @@ describe('WizardContext pending queue logic', () => {
     const results: ToolApprovalResult[] = [];
 
     // Add two tool approvals
-    const promiseA = queue.addToolApproval({ toolName: 'Tool A', input: { a: 1 } });
-    const promiseB = queue.addToolApproval({ toolName: 'Tool B', input: { b: 2 } });
+    const promiseA = queue.addToolApproval({
+      toolName: 'Tool A',
+      input: { a: 1 },
+    });
+    const promiseB = queue.addToolApproval({
+      toolName: 'Tool B',
+      input: { b: 2 },
+    });
 
-    promiseA.then((r) => results.push(r));
-    promiseB.then((r) => results.push(r));
+    void promiseA.then((r) => results.push(r));
+    void promiseB.then((r) => results.push(r));
 
     // Queue should have 2 items
     expect(queue.queueLength).toBe(2);
 
     // Current item should be Tool A (first in, first shown)
     expect(queue.currentItem?.type).toBe('tool-approval');
-    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe('Tool A');
+    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe(
+      'Tool A',
+    );
 
     // Resolve Tool A
     queue.resolvePending({ behavior: 'allow', updatedInput: { a: 1 } });
@@ -127,7 +142,9 @@ describe('WizardContext pending queue logic', () => {
 
     // Now Tool B should be current
     expect(queue.queueLength).toBe(1);
-    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe('Tool B');
+    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe(
+      'Tool B',
+    );
 
     // Tool A's result should be recorded
     expect(results.length).toBe(1);
@@ -151,13 +168,13 @@ describe('WizardContext pending queue logic', () => {
     const resolvedFlags = [false, false, false];
 
     // Queue 3 approvals simultaneously
-    queue.addToolApproval({ toolName: 'Tool 1', input: {} }).then(() => {
+    void queue.addToolApproval({ toolName: 'Tool 1', input: {} }).then(() => {
       resolvedFlags[0] = true;
     });
-    queue.addToolApproval({ toolName: 'Tool 2', input: {} }).then(() => {
+    void queue.addToolApproval({ toolName: 'Tool 2', input: {} }).then(() => {
       resolvedFlags[1] = true;
     });
-    queue.addToolApproval({ toolName: 'Tool 3', input: {} }).then(() => {
+    void queue.addToolApproval({ toolName: 'Tool 3', input: {} }).then(() => {
       resolvedFlags[2] = true;
     });
 
@@ -204,11 +221,13 @@ describe('WizardContext pending queue logic', () => {
     expect(queue.currentItem?.type).toBe('persistent-input');
 
     // Add a tool approval - should take priority (queue item over fallback)
-    queue.addToolApproval({ toolName: 'Tool A', input: {} });
+    void queue.addToolApproval({ toolName: 'Tool A', input: {} });
 
     // Tool approval should be shown, not persistent input
     expect(queue.currentItem?.type).toBe('tool-approval');
-    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe('Tool A');
+    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe(
+      'Tool A',
+    );
 
     // Persistent input is still configured
     expect(queue.hasPersistentInput).toBe(true);
@@ -222,8 +241,8 @@ describe('WizardContext pending queue logic', () => {
     expect(queue.currentItem?.type).toBe('persistent-input');
 
     // Add two tool approvals
-    queue.addToolApproval({ toolName: 'Tool A', input: {} });
-    queue.addToolApproval({ toolName: 'Tool B', input: {} });
+    void queue.addToolApproval({ toolName: 'Tool A', input: {} });
+    void queue.addToolApproval({ toolName: 'Tool B', input: {} });
 
     // Tool approvals take priority
     expect(queue.currentItem?.type).toBe('tool-approval');
@@ -247,9 +266,15 @@ describe('WizardContext pending queue logic', () => {
     const order: string[] = [];
 
     // Add various items to queue
-    queue.addToolApproval({ toolName: 'Edit', input: {} }).then(() => order.push('Edit'));
-    queue.addToolApproval({ toolName: 'Write', input: {} }).then(() => order.push('Write'));
-    queue.addToolApproval({ toolName: 'Bash', input: {} }).then(() => order.push('Bash'));
+    void queue
+      .addToolApproval({ toolName: 'Edit', input: {} })
+      .then(() => order.push('Edit'));
+    void queue
+      .addToolApproval({ toolName: 'Write', input: {} })
+      .then(() => order.push('Write'));
+    void queue
+      .addToolApproval({ toolName: 'Bash', input: {} })
+      .then(() => order.push('Bash'));
 
     // Queue them and resolve in order
     expect(queue.queueLength).toBe(3);
@@ -289,10 +314,10 @@ describe('WizardContext pending queue logic', () => {
     let bResolved = false;
 
     // Simulate the SDK issuing two tool calls in quick succession
-    queue.addToolApproval({ toolName: 'Tool A', input: {} }).then(() => {
+    void queue.addToolApproval({ toolName: 'Tool A', input: {} }).then(() => {
       aResolved = true;
     });
-    queue.addToolApproval({ toolName: 'Tool B', input: {} }).then(() => {
+    void queue.addToolApproval({ toolName: 'Tool B', input: {} }).then(() => {
       bResolved = true;
     });
 
@@ -300,7 +325,9 @@ describe('WizardContext pending queue logic', () => {
     expect(queue.queueLength).toBe(2);
 
     // First item shown should be Tool A (not B)
-    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe('Tool A');
+    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe(
+      'Tool A',
+    );
 
     // Approving the first item resolves A (not B)
     queue.resolvePending({ behavior: 'allow', updatedInput: {} });
@@ -310,7 +337,9 @@ describe('WizardContext pending queue logic', () => {
     expect(bResolved).toBe(false);
 
     // Now B is shown
-    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe('Tool B');
+    expect((queue.currentItem?.props as ToolApprovalProps).toolName).toBe(
+      'Tool B',
+    );
 
     // Approving resolves B
     queue.resolvePending({ behavior: 'allow', updatedInput: {} });

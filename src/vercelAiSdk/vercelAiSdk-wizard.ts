@@ -8,8 +8,6 @@ import { getPackageVersion } from '../utils/package-json.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import ui from '../utils/ui.js';
-import { abort } from '../utils/clack-utils.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -31,34 +29,9 @@ const VERCEL_AI_SDK_AGENT_CONFIG: FrameworkConfig = {
   },
 
   prompts: {
-    getDocumentation: async () => {
+    getDocumentation: async (options) => {
       try {
-        // Ask about OTEL platform
-        const otelPlatform = await ui.select({
-          message: 'How do you want OpenTelemetry setup?',
-          options: [
-            {
-              value: 'next',
-              label: 'Next.js',
-            },
-            {
-              value: 'node',
-              label: 'Node.js',
-            },
-            {
-              value: 'cloudflare',
-              label: 'Cloudflare Workers',
-            },
-            {
-              value: 'sentry',
-              label: 'Sentry (Next.js)',
-            },
-          ],
-        });
-
-        if (ui.isCancel(otelPlatform)) {
-          abort('Setup cancelled', 0);
-        }
+        const { otelPlatform } = options;
 
         // __dirname in compiled code is dist/src/vercelAiSdk/, so go up to project root then to src/vercelAiSdk/
         const baseDocsPath = path.resolve(

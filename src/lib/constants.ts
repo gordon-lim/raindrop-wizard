@@ -7,11 +7,11 @@ export enum Integration {
 export function getIntegrationDescription(type: string): string {
   switch (type) {
     case Integration.python:
-      return 'Python';
+      return 'a Python SDK';
     case Integration.typescript:
-      return 'TypeScript';
+      return 'a TypeScript SDK';
     case Integration.vercelAiSdk:
-      return 'Vercel AI SDK';
+      return 'the Vercel AI SDK';
     default:
       throw new Error(`Unknown integration ${type}`);
   }
@@ -32,7 +32,7 @@ export const OAUTH_USERINFO_URL = `${OAUTH_URL}/propelauth/oauth/userinfo`;
 export const OAUTH_PORT = 8259;
 export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_PORT}/callback`;
 export const API_BASE_URL = 'http://localhost:3000';
-export const API_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;
+export const WRITE_KEY_ENDPOINT = `${API_BASE_URL}/api/cli/users/key`;
 export const EVENTS_LIST_ENDPOINT = `${API_BASE_URL}/api/cli/events/list`;
 export const ANTHROPIC_BASE_URL = `${API_BASE_URL}/api/cli`;
 export const SESSION_START_ENDPOINT = `${API_BASE_URL}/api/cli/session/init`;

@@ -1,16 +1,14 @@
-import { SESSION_START_ENDPOINT, SESSION_UPDATE_ENDPOINT } from '../lib/constants.js';
-import ui from './ui.js';
+import {
+  SESSION_START_ENDPOINT,
+  SESSION_UPDATE_ENDPOINT,
+} from '../lib/constants.js';
 
 export function sendSessionInit(
   sessionId: string,
   setupDetails: string,
   accessToken: string,
+  orgId: string,
 ): void {
-  ui.addItem({
-    type: 'response',
-    text: `Session started: ${sessionId.slice(0, 8)}...`,
-  });
-
   // Fire and forget - don't await
   void fetch(SESSION_START_ENDPOINT, {
     method: 'POST',
@@ -18,6 +16,7 @@ export function sendSessionInit(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       'x-wizard-session': sessionId,
+      'x-org-id': orgId,
     },
     body: JSON.stringify({
       setupDetails,
@@ -31,6 +30,7 @@ export function sendSessionUpdate(
   sessionId: string,
   plan: string,
   accessToken: string,
+  orgId: string,
 ): void {
   // Fire and forget - don't await
   void fetch(SESSION_UPDATE_ENDPOINT, {
@@ -39,6 +39,7 @@ export function sendSessionUpdate(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       'x-wizard-session': sessionId,
+      'x-org-id': orgId,
     },
     body: JSON.stringify({
       plan,

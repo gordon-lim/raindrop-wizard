@@ -5,6 +5,10 @@ export type PreselectedProject = {
   authToken: string;
 };
 
+export type OtelPlatform = 'next' | 'node' | 'cloudflare' | 'sentry';
+
+export type OtelProvider = '' | 'sentry' | 'other';
+
 export type WizardOptions = {
   /**
    * Whether to enable debug mode.
@@ -42,6 +46,16 @@ export type WizardOptions = {
    * Contains project info like package.json, dependencies, etc.
    */
   compiledSetup: string;
+
+  /**
+   * OpenTelemetry platform selection for Vercel AI SDK integration.
+   */
+  otelPlatform?: OtelPlatform;
+
+  /**
+   * OpenTelemetry provider selection for TypeScript integration.
+   */
+  otelProvider?: OtelProvider;
 };
 
 export interface Feature {

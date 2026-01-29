@@ -35,8 +35,9 @@ export async function abortIfCancelled<T>(
 
     ui.addItem({
       type: 'cancel',
-      text: `Wizard setup cancelled. You can read the documentation for ${integration ?? 'Raindrop'
-        } at ${chalk.cyan(docsUrl)} to continue with the setup manually.`,
+      text: `Wizard setup cancelled. You can read the documentation for ${
+        integration ?? 'Raindrop'
+      } at ${chalk.cyan(docsUrl)} to continue with the setup manually.`,
     });
     process.exit(0);
   } else {
@@ -51,15 +52,15 @@ export async function confirmContinueIfNoOrDirtyGitRepo(
     const continueWithoutGit = options.default
       ? true
       : await abortIfCancelled(
-        ui.select({
-          message:
-            'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
-          options: [
-            { label: 'Yes', value: true },
-            { label: 'No', value: false },
-          ],
-        }),
-      );
+          ui.select({
+            message:
+              'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
+            options: [
+              { label: 'Yes', value: true },
+              { label: 'No', value: false },
+            ],
+          }),
+        );
 
     if (!continueWithoutGit) {
       abort(undefined, 0);
@@ -103,7 +104,8 @@ export function isInGitRepo() {
   } catch (error) {
     // Not in a git repo - this is expected in some cases
     debug(
-      `Not in git repository: ${error instanceof Error ? error.message : String(error)
+      `Not in git repository: ${
+        error instanceof Error ? error.message : String(error)
       }`,
     );
     return false;
@@ -129,7 +131,8 @@ export function getUncommittedOrUntrackedFiles(): string[] {
   } catch (error) {
     // Error running git status - likely not in a git repo or git not available
     debug(
-      `Failed to get git status: ${error instanceof Error ? error.message : String(error)
+      `Failed to get git status: ${
+        error instanceof Error ? error.message : String(error)
       }`,
     );
     return [];
@@ -140,23 +143,23 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
   const aiConsent = options.default
     ? true
     : await abortIfCancelled(
-      ui.select({
-        message: 'This setup wizard uses AI, are you happy to continue? ✨',
-        options: [
-          {
-            label: 'Yes',
-            value: true,
-            hint: 'We will use AI to help you setup Raindrop quickly',
-          },
-          {
-            label: 'No',
-            value: false,
-            hint: "I don't like AI",
-          },
-        ],
-        initialValue: true,
-      }),
-    );
+        ui.select({
+          message: 'This setup wizard uses AI, are you happy to continue? ✨',
+          options: [
+            {
+              label: 'Yes',
+              value: true,
+              hint: 'We will use AI to help you setup Raindrop quickly',
+            },
+            {
+              label: 'No',
+              value: false,
+              hint: "I don't like AI",
+            },
+          ],
+          initialValue: true,
+        }),
+      );
 
   return aiConsent;
 }
@@ -179,7 +182,9 @@ export async function askForWizardLogin(options: {
   return tokenResponse;
 }
 
-export async function validateProjectAccess(accessToken: string): Promise<void> {
+export async function validateProjectAccess(
+  accessToken: string,
+): Promise<void> {
   const userInfo = await getUserInfo(accessToken);
   const orgIds = Object.keys(userInfo.org_id_to_org_info || {});
   const projectId = orgIds[0];

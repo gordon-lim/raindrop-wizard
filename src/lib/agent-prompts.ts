@@ -3,6 +3,7 @@
  */
 
 import type { FrameworkConfig } from './framework-config.js';
+import type { WizardOptions } from '../utils/types.js';
 import { logToFile } from '../utils/debug.js';
 
 /**
@@ -15,17 +16,17 @@ export function buildTestFeedbackMessage(
   const eventSummary =
     events.length > 0
       ? events
-        .map((event, idx) => {
-          const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
-          const spanCount = event.data.spans?.length || 0;
-          const aiAttrs = event.data.aiAttributes || event.data;
+          .map((event, idx) => {
+            const format = event.data.format === 'otel' ? 'OTEL' : 'JSON';
+            const spanCount = event.data.spans?.length || 0;
+            const aiAttrs = event.data.aiAttributes || event.data;
 
-          return `Event #${idx + 1} at ${event.url}:
+            return `Event #${idx + 1} at ${event.url}:
 Format: ${format}
 ${spanCount > 0 ? `Spans: ${spanCount}` : ''}
 Data: ${JSON.stringify(aiAttrs, null, 2)}`;
-        })
-        .join('\n\n')
+          })
+          .join('\n\n')
       : 'No events received.';
 
   return `# Integration Test Results
@@ -167,11 +168,12 @@ export async function buildIntegrationPrompt(
     otelProvider?: string;
     sessionId: string;
   },
+  options: WizardOptions,
 ): Promise<string> {
   let documentation = '';
   if (config.prompts.getDocumentation) {
     try {
-      documentation = await config.prompts.getDocumentation();
+      documentation = await config.prompts.getDocumentation(options);
     } catch (error) {
       logToFile('Error loading documentation:', error);
       // Continue without documentation if loading fails
@@ -180,7 +182,10 @@ export async function buildIntegrationPrompt(
 
   // Replace wizardSession placeholder with the actual session ID
   if (documentation) {
-    documentation = documentation.replace(/__WIZARD_SESSION_UUID__/g, context.sessionId);
+    documentation = documentation.replace(
+      /__WIZARD_SESSION_UUID__/g,
+      context.sessionId,
+    );
   }
 
   const otelProviderInfo = context.otelProvider

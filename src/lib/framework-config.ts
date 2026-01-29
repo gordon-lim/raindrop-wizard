@@ -1,5 +1,6 @@
 import type { Integration } from './constants.js';
 import type { PackageJson } from '../utils/package-json-types.js';
+import type { WizardOptions } from '../utils/types.js';
 
 /**
  * Configuration interface for framework-specific agent integrations.
@@ -40,9 +41,9 @@ export interface FrameworkDetection {
 export interface PromptConfig {
   /**
    * Optional: Get documentation content to include in the prompt.
-   * May ask user questions to determine which documentation to load.
+   * Receives wizard options to access user selections like otelPlatform.
    */
-  getDocumentation?: () => Promise<string>;
+  getDocumentation?: (options: WizardOptions) => Promise<string>;
 }
 
 /**

@@ -4,7 +4,7 @@
  * Used by PlanApprovalPrompt and test-server for "yes/no with feedback" patterns.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useWizard } from '../contexts/WizardContext.js';
@@ -40,12 +40,6 @@ export function FeedbackSelectPrompt<T>({
   const [isTypingMode, setIsTypingMode] = useState(false);
   const [customText, setCustomText] = useState('');
 
-  // Find the index of the text input option (if any)
-  const textInputOptionIndex = useMemo(
-    () => options.options.findIndex((opt) => opt.allowTextInput),
-    [options.options],
-  );
-
   // Handle submitting a result
   const submitResult = useCallback(
     (result: FeedbackSelectResult<T>) => {
@@ -57,9 +51,11 @@ export function FeedbackSelectPrompt<T>({
         addItem({
           type: 'select-result',
           text: options.message,
-          label: result.type === 'option' 
-            ? options.options.find((o) => o.value === result.value)?.label || String(result.value)
-            : result.value,
+          label:
+            result.type === 'option'
+              ? options.options.find((o) => o.value === result.value)?.label ||
+                String(result.value)
+              : result.value,
         });
         resolvePending(result);
       }
@@ -119,7 +115,9 @@ export function FeedbackSelectPrompt<T>({
         return;
       }
       if (key.downArrow) {
-        setHighlightedIndex((idx) => Math.min(options.options.length - 1, idx + 1));
+        setHighlightedIndex((idx) =>
+          Math.min(options.options.length - 1, idx + 1),
+        );
         return;
       }
 

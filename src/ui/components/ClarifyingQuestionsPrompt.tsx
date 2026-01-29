@@ -39,15 +39,14 @@ function StepperProgress({
   answers: Record<string, string>;
 }): React.ReactElement {
   // Add "Submit" as the final step
-  const steps = [
-    ...questions.map((q) => q.header),
-    'Submit',
-  ];
+  const steps = [...questions.map((q) => q.header), 'Submit'];
 
   return (
     <Box marginBottom={1}>
       {steps.map((header, idx) => {
-        const isCompleted = idx < currentIndex || (idx < questions.length && answers[questions[idx].question]);
+        const isCompleted =
+          idx < currentIndex ||
+          (idx < questions.length && answers[questions[idx].question]);
         const isCurrent = idx === currentIndex;
 
         // Determine the marker
@@ -68,13 +67,14 @@ function StepperProgress({
         return (
           <Box key={idx}>
             {/* Connector line before (except first) */}
-            {idx > 0 && (
-              <Text color="gray"> ━━━ </Text>
-            )}
+            {idx > 0 && <Text color="gray"> ━━━ </Text>}
             {/* Marker and label */}
             <Box>
               <Text color={markerColor}>{marker}</Text>
-              <Text color={textColor} dimColor={textDim}> {header}</Text>
+              <Text color={textColor} dimColor={textDim}>
+                {' '}
+                {header}
+              </Text>
             </Box>
           </Box>
         );
@@ -115,6 +115,17 @@ export function ClarifyingQuestionsPrompt({
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   const isMultiSelect = currentQuestion?.multiSelect ?? false;
+
+  // Get regular option values (needed before handleCustomTextSubmit)
+  const regularOptionValues = useMemo(() => {
+    if (!currentQuestion) return new Set<string>();
+    return new Set(currentQuestion.options.map((opt) => opt.label));
+  }, [currentQuestion]);
+
+  // Get custom entries (values in multiSelections that aren't regular options)
+  const customEntries = useMemo(() => {
+    return multiSelections.filter((v) => !regularOptionValues.has(v));
+  }, [multiSelections, regularOptionValues]);
 
   // Build list items for current question
   const items: ListItem[] = useMemo(() => {
@@ -197,7 +208,7 @@ export function ClarifyingQuestionsPrompt({
 
     // Interrupt the agent
     if (agentState.queryHandle?.interrupt) {
-      agentState.queryHandle.interrupt();
+      void agentState.queryHandle.interrupt();
     }
 
     const result: ClarifyingQuestionsResult = {
@@ -208,24 +219,35 @@ export function ClarifyingQuestionsPrompt({
   }, [questions, resolvePending, addItem, agentState.queryHandle]);
 
   // Handle custom text submission from TextInput
-  const handleCustomTextSubmit = useCallback((value: string) => {
-    if (!value.trim()) return;
+  const handleCustomTextSubmit = useCallback(
+    (value: string) => {
+      if (!value.trim()) return;
 
-    const trimmedValue = value.trim();
-    
-    if (isMultiSelect) {
-      // Multi-select: Toggle checkbox, keep text
-      if (multiSelections.includes(trimmedValue)) {
-        setMultiSelections((prev) => prev.filter((v) => v !== trimmedValue));
+      const trimmedValue = value.trim();
+
+      if (isMultiSelect) {
+        // Multi-select: Replace any existing custom entries with the new value
+        // This ensures only the latest typed value is kept, not multiple versions
+        if (multiSelections.includes(trimmedValue)) {
+          // Same value already exists - toggle it off
+          setMultiSelections((prev) => prev.filter((v) => v !== trimmedValue));
+        } else {
+          // New value - remove old custom entries and add the new one
+          setMultiSelections((prev) => {
+            const withoutOldCustom = prev.filter((v) =>
+              regularOptionValues.has(v),
+            );
+            return [...withoutOldCustom, trimmedValue];
+          });
+        }
+        // Don't clear text - keep it for further editing or submit
       } else {
-        setMultiSelections((prev) => [...prev, trimmedValue]);
+        // Single-select: Submit immediately with the typed value
+        proceedToNext(trimmedValue);
       }
-      // Don't clear text - keep it for further editing or submit
-    } else {
-      // Single-select: Submit immediately with the typed value
-      proceedToNext(trimmedValue);
-    }
-  }, [isMultiSelect, multiSelections, proceedToNext]);
+    },
+    [isMultiSelect, multiSelections, regularOptionValues, proceedToNext],
+  );
 
   // Handle keyboard navigation and selection
   useInput((input, key) => {
@@ -301,7 +323,15 @@ export function ClarifyingQuestionsPrompt({
       if (!selectedItem) return;
 
       if (selectedItem.value === '__OTHER__') {
-        // Enter typing mode
+        if (isMultiSelect && customEntries.length > 0) {
+          // Already has custom entries - toggle (clear) them to uncheck
+          setMultiSelections((prev) =>
+            prev.filter((v) => !customEntries.includes(v)),
+          );
+          setCustomText('');
+          return;
+        }
+        // No custom entries yet - enter typing mode
         setIsTypingMode(true);
         return;
       }
@@ -333,16 +363,6 @@ export function ClarifyingQuestionsPrompt({
     }
   });
 
-  // Get custom entries (values in multiSelections that aren't regular options)
-  const regularOptionValues = useMemo(() => {
-    if (!currentQuestion) return new Set<string>();
-    return new Set(currentQuestion.options.map((opt) => opt.label));
-  }, [currentQuestion]);
-
-  const customEntries = useMemo(() => {
-    return multiSelections.filter((v) => !regularOptionValues.has(v));
-  }, [multiSelections, regularOptionValues]);
-
   // Render a single list item
   const renderItem = (item: ListItem, index: number) => {
     const isHighlighted = index === highlightedIndex;
@@ -359,9 +379,11 @@ export function ClarifyingQuestionsPrompt({
       // Show checkbox only for multi-select
       const hasCustomEntries = customEntries.length > 0;
       const checkbox = isMultiSelect
-        ? hasCustomEntries ? '[✓] ' : '[ ] '
+        ? hasCustomEntries
+          ? '[✓] '
+          : '[ ] '
         : '';
-      
+
       return (
         <Box key={item.value}>
           <Text color={isHighlighted ? 'cyan' : undefined}>
@@ -377,9 +399,7 @@ export function ClarifyingQuestionsPrompt({
               placeholder=""
             />
           ) : (
-            <Text color={isHighlighted ? 'cyan' : undefined}>
-              {item.label}
-            </Text>
+            <Text color={isHighlighted ? 'cyan' : undefined}>{item.label}</Text>
           )}
         </Box>
       );
@@ -388,7 +408,11 @@ export function ClarifyingQuestionsPrompt({
     // Submit option
     if (isSubmitOption) {
       const canSubmit = multiSelections.length > 0 || customText.trim();
-      const textColor = isHighlighted ? 'cyan' : !canSubmit ? 'gray' : undefined;
+      const textColor = isHighlighted
+        ? 'cyan'
+        : !canSubmit
+        ? 'gray'
+        : undefined;
       return (
         <Box key={item.value}>
           <Text color={textColor}>{indicator}</Text>
@@ -398,21 +422,16 @@ export function ClarifyingQuestionsPrompt({
     }
 
     // Regular option - show checkbox for multi-select mode
-    const checkbox = isMultiSelect
-      ? isSelected
-        ? '[✓] '
-        : '[ ] '
-      : '';
+    const checkbox = isMultiSelect ? (isSelected ? '[✓] ' : '[ ] ') : '';
 
     return (
       <Box key={item.value}>
         <Text color={isHighlighted ? 'cyan' : undefined}>
           {indicator}
-          {displayNumber}. {checkbox}{item.label}
+          {displayNumber}. {checkbox}
+          {item.label}
         </Text>
-        {item.description && (
-          <Text dimColor> ({item.description})</Text>
-        )}
+        {item.description && <Text dimColor> ({item.description})</Text>}
       </Box>
     );
   };
@@ -451,7 +470,9 @@ export function ClarifyingQuestionsPrompt({
               </Box>
               <Box marginLeft={2}>
                 <Text color="gray">→ </Text>
-                <Text color="green">{answers[q.question] || '(no answer)'}</Text>
+                <Text color="green">
+                  {answers[q.question] || '(no answer)'}
+                </Text>
               </Box>
             </Box>
           ))}
@@ -481,7 +502,6 @@ export function ClarifyingQuestionsPrompt({
 
   return (
     <PromptContainer>
-
       {/* Stepper progress bar */}
       <StepperProgress
         questions={questions}

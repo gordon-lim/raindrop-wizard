@@ -59,40 +59,49 @@ yargs(hideBin(process.argv))
         },
       });
     },
-    async (argv) => {
+    (argv) => {
       const options = { ...argv };
 
       // TTY check - must use console before Ink is initialized
       if (isNonInteractiveEnvironment()) {
         red(
           'Raindrop Wizard requires an interactive terminal (TTY) to run.\n' +
-          'It appears you are running in a non-interactive environment.\n' +
-          'Please run the wizard in an interactive terminal.',
+            'It appears you are running in a non-interactive environment.\n' +
+            'Please run the wizard in an interactive terminal.',
         );
         process.exit(1);
       }
 
-      // Initialize the unified Ink app (single render call)
-      const wizardUI = await initWizardUI();
+      // Run the async wizard logic
+      void (async () => {
+        // Initialize the unified Ink app (single render call)
+        const wizardUI = await initWizardUI();
 
-      // Display logo through Ink
-      ui.addItem({ type: 'logo', text: '' });
+        // Display logo through Ink
+        ui.addItem({ type: 'logo', text: '' });
 
-      try {
-        await runWizard(options as unknown as WizardOptions);
-        process.exit(0);
-      } catch (error) {
-        ui.addItem({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` });
+        try {
+          await runWizard(options as unknown as WizardOptions);
+          process.exit(0);
+        } catch (error) {
+          ui.addItem({
+            type: 'error',
+            text: `Error: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+          wizardUI.unmount();
+          process.exit(1);
+        }
+
+        // The wizard completes - unmount the UI
         wizardUI.unmount();
-        process.exit(1);
-      }
-
-      // The wizard completes - unmount the UI
-      wizardUI.unmount();
+      })();
     },
   )
   .help()
   .alias('help', 'h')
   .version()
   .alias('version', 'v')
-  .wrap(null).argv; // null = use terminal width automatically
+  .wrap(null)
+  .parseAsync(); // null = use terminal width automatically
